@@ -1,0 +1,2793 @@
+import { useState, useEffect, useRef } from "react";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BALL KNOWLEDGE — FINAL
+// Merged build: full v2 engine (login, autocomplete, 25-day quiz DB, 5 game
+// types, achievements, stats, league, profile, per-game HowTo modals) +
+// v3 UI polish (daily-challenge social proof line, raised BottomNav play tab,
+// cosmetic refinements).
+// Last merged: 2 May 2026
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BRAND COLOURS & FONT
+// ─────────────────────────────────────────────────────────────────────────────
+const C = {
+  blue:"#1a56db",blueDk:"#1240a8", cyan:"#00bcd4",cyanDk:"#0097a7",
+  lav:"#c084fc",lavDk:"#9333ea",   red:"#ff4b4b",redDk:"#cc0000",
+  orange:"#ff9600",orgDk:"#cc7800",green:"#58cc02",greenDk:"#46a302",
+  yellow:"#fbbf24",yelDk:"#d97706",pink:"#ec4899",pinkDk:"#be185d",
+  white:"#ffffff",offWhite:"#f7f8ff",
+  border:"#e2e8f0",borderDk:"#c7d2fe",
+  txt:"#1e293b",txtLight:"#64748b",txtFaint:"#94a3b8",
+};
+const FONT = "'Arial Rounded MT Bold','Arial Black',Arial,sans-serif";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PLAYER DATABASE (autocomplete source)
+// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// SMART AUTOCOMPLETE HELPER
+// Always merges the static PLAYER_DB with the actual quiz answers for the
+// current game, so every correct answer is searchable even if it isn't in
+// the static list (e.g. managers, historical figures, niche players).
+// ─────────────────────────────────────────────────────────────────────────────
+function buildSearchPool(quizAnswers = []) {
+  const answerNames = quizAnswers.map(a => typeof a === "string" ? a : a.name).filter(Boolean);
+  const combined = [...new Set([...PLAYER_DB, ...answerNames])];
+  return combined;
+}
+
+function smartSuggest(value, pool, exclude = [], limit = 8) {
+  if (value.length < 2) return [];
+  const q = value.toLowerCase();
+  return pool
+    .filter(n => n.toLowerCase().includes(q) && !exclude.some(e => e.toLowerCase() === n.toLowerCase()))
+    .slice(0, limit);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FOOTBALL FIGURES DATABASE
+// Covers players, managers, legends — used for autocomplete across all games.
+// Smart autocomplete also merges today's quiz answers so answers are always
+// findable even if a name isn't in this list.
+// ─────────────────────────────────────────────────────────────────────────────
+const PLAYER_DB = [
+  // ── Current stars ──
+  "Erling Haaland","Kevin De Bruyne","Phil Foden","Rodri","Mohamed Salah",
+  "Virgil van Dijk","Alisson","Trent Alexander-Arnold","Darwin Nunez",
+  "Bukayo Saka","Martin Odegaard","Declan Rice","Gabriel Martinelli",
+  "Marcus Rashford","Bruno Fernandes","Casemiro","Son Heung-min",
+  "Cole Palmer","Enzo Fernandez","Moises Caicedo","Nicolas Jackson",
+  "Alexander Isak","Bruno Guimaraes","Anthony Gordon","Ollie Watkins",
+  "Vinicius Junior","Jude Bellingham","Luka Modric","Toni Kroos",
+  "Robert Lewandowski","Pedri","Gavi","Antoine Griezmann","Kylian Mbappe",
+  "Jamal Musiala","Joshua Kimmich","Manuel Neuer","Thomas Muller",
+  "Rafael Leao","Victor Osimhen","Khvicha Kvaratskhelia","Lautaro Martinez",
+
+  // ── PL legends & top scorers ──
+  "Alan Shearer","Harry Kane","Wayne Rooney","Andrew Cole","Sergio Aguero",
+  "Frank Lampard","Thierry Henry","Robbie Fowler","Jermain Defoe","Michael Owen",
+  "Les Ferdinand","Teddy Sheringham","Jimmy Floyd Hasselbaink","Dion Dublin",
+  "Nicolas Anelka","Ian Wright","Matt Le Tissier","Peter Beardsley",
+
+  // ── World & European legends ──
+  "Cristiano Ronaldo","Lionel Messi","Neymar","Karim Benzema","Sergio Ramos",
+  "Zlatan Ibrahimovic","Andrea Pirlo","Xavi Hernandez","Andres Iniesta",
+  "Paolo Maldini","Zinedine Zidane","Ronaldo Nazario","Ronaldinho","David Beckham",
+  "Johan Cruyff","Michel Platini","Marco van Basten","Franz Beckenbauer",
+  "Pele","Diego Maradona","Gerd Muller","Just Fontaine","Miroslav Klose",
+  "Sandor Kocsis","Raul","Ruud van Nistelrooy","Andriy Shevchenko",
+  "Roberto Baggio","George Best","Bobby Charlton","Bobby Moore","Jimmy Greaves",
+  "Eusebio","Lev Yashin","Ferenc Puskas","Garrincha","Rivaldo",
+  "Roberto Carlos","Cafu","Samuel Eto'o","Didier Drogba",
+
+  // ── Liverpool 2019 CL squad ──
+  "Jordan Henderson","Roberto Firmino","Sadio Mane","Fabinho","James Milner",
+  "Divock Origi","Joel Matip","Georginio Wijnaldum","Joe Gomez","Adam Lallana",
+  "Dejan Lovren","Daniel Sturridge","Xherdan Shaqiri","Andrew Robertson",
+
+  // ── Arsenal Invincibles ──
+  "Ryan Giggs","Paul Scholes","Roy Keane","Patrick Vieira","Dennis Bergkamp",
+  "John Terry","Rio Ferdinand","Ashley Cole","Peter Schmeichel",
+  "Eden Hazard","Fernando Torres","Luis Suarez","Cesc Fabregas","Robin van Persie",
+  "David Silva","Yaya Toure","Vincent Kompany","Raheem Sterling",
+  "Hugo Lloris","Raphael Varane","Paul Pogba","N'Golo Kante","Olivier Giroud",
+  "Blaise Matuidi","Ousmane Dembele","Benjamin Pavard","Lucas Hernandez",
+  "Presnel Kimpembe","Samuel Umtiti","Steven Gerrard","Gary Neville",
+  "Patrick Kluivert","Clarence Seedorf","Marc Overmars","Nwankwo Kanu",
+  "Freddie Ljungberg","Robert Pires","Sylvain Wiltord","Sol Campbell",
+  "Martin Keown","Lee Dixon","Lauren","Gilberto Silva","Edu","Kanu",
+  "Jose Antonio Reyes","Pascal Cygan","Gael Clichy","Jens Lehmann",
+  "Dani Alves","Gerard Pique","Carles Puyol","Victor Valdes",
+  "Seydou Keita","Yaya Toure","Sylvinho","Eric Abidal","Sergio Busquets",
+  "Pedro","Jose Manuel Pinto","Rafael Marquez",
+
+  // ── Managers / Coaches ──
+  "Sir Alex Ferguson","Arsene Wenger","Jose Mourinho","Pep Guardiola",
+  "Jurgen Klopp","Carlo Ancelotti","Claudio Ranieri","Antonio Conte",
+  "Diego Simeone","Zinedine Zidane","Kenny Dalglish","Howard Wilkinson",
+  "George Graham","Roberto Mancini","Brendan Rodgers","Ole Gunnar Solskjaer",
+  "Frank Lampard","Steven Gerrard","Rafa Benitez","Harry Redknapp",
+  "Glenn Hoddle","Sven-Goran Eriksson","Fabio Capello","Roy Hodgson",
+  "Gareth Southgate","Graham Taylor","Terry Venables","Peter Taylor",
+  "Brian Clough","Bob Paisley","Bill Shankly","Matt Busby","Herbert Chapman",
+  "Alf Ramsey","Don Revie","Ron Greenwood","Bobby Robson","Walter Winterbottom",
+  "Luiz Felipe Scolari","Vicente del Bosque","Didier Deschamps",
+  "Joachim Low","Ottmar Hitzfeld","Louis van Gaal","Ronald Koeman",
+  "Erik ten Hag","Mauricio Pochettino","Thomas Tuchel","Julian Nagelsmann",
+  "Roger Schmidt","Niko Kovac","Hansi Flick","Markus Gisdol",
+
+  // ── England caps leaders ──
+  "Peter Shilton","David Seaman","Gordon Banks","Joe Hart","Nick Pope",
+  "Billy Wright","Bobby Moore","Tony Adams","Terry Butcher","Stuart Pearce",
+
+  // ── Ballon d'Or winners ──
+  "Fabio Cannavaro","Kaka","Luka Modric","Ivan Rakitic",
+  "Karl-Heinz Rummenigge","Kevin Keegan","Oleg Blokhin","Allan Simonsen",
+
+  // ── Germany 2014 World Cup winning squad ──
+  "Philipp Lahm","Mats Hummels","Jerome Boateng","Bastian Schweinsteiger",
+  "Mesut Ozil","Mario Gotze","Lukas Podolski","Per Mertesacker",
+  "Andre Schurrle","Julian Draxler","Sami Khedira","Christoph Kramer",
+  "Benedikt Howedes","Erik Durm","Ron-Robert Zieler","Roman Weidenfeller",
+
+  // ── Spain 2010 World Cup winning squad ──
+  "Iker Casillas","Xabi Alonso","Joan Capdevila","Alvaro Arbeloa",
+  "David Villa","Fernando Llorente","Raul Albiol","Carlos Marchena",
+  "Santi Cazorla","Jesus Navas","Jose Manuel Puyol",
+
+  // ── Italy Euro 2020 winning squad ──
+  "Gianluigi Donnarumma","Giorgio Chiellini","Leonardo Bonucci",
+  "Nicolo Barella","Marco Verratti","Jorginho","Lorenzo Insigne",
+  "Ciro Immobile","Federico Chiesa","Giovanni Di Lorenzo",
+  "Leonardo Spinazzola","Alessandro Bastoni","Manuel Locatelli",
+  "Bryan Cristante","Matteo Pessina","Andrea Belotti","Giacomo Raspadori",
+  "Alessandro Florenzi","Emerson Palmieri",
+
+  // ── Italian legends ──
+  "Andrea Pirlo","Paolo Maldini","Franco Baresi","Alessandro Nesta",
+  "Francesco Totti","Alessandro Del Piero","Gianluigi Buffon",
+  "Gianluca Vialli","Roberto Mancini","Dino Zoff","Gaetano Scirea",
+
+  // ── Spanish legends ──
+  "Alfredo Di Stefano","Emilio Butragueno","Fernando Hierro",
+  "Michel","Martin Vazquez","Butrageno",
+
+  // ── Women's football stars ──
+  "Sam Kerr","Ada Hegerberg","Marta","Megan Rapinoe","Alex Morgan",
+  "Alexia Putellas","Vivianne Miedema","Pernille Harder",
+  "Beth Mead","Lauren Hemp","Lucy Bronze","Fran Kirby",
+  "Leah Williamson","Millie Bright","Ellen White","Nikita Parris",
+  "Wendie Renard","Marie-Antoinette Katoto","Carolina Morace",
+  "Abby Wambach","Julie Foudy","Mia Hamm","Brandi Chastain",
+
+  // ── African football legends ──
+  "George Weah","Abedi Pele","Jay-Jay Okocha","Austin Okocha",
+  "Rashidi Yekini","Nwankwo Kanu","Sunday Oliseh","Daniel Amokachi",
+  "Taribo West","Celestine Babayaro","Tijani Babangida","Emmanuel Amunike",
+  "Victor Ikpeba","Garba Lawal","Wilson Oruma","Uche Okechukwu",
+  "Yaya Toure","Kolo Toure","Michael Essien","Asamoah Gyan",
+  "Andre Ayew","Jordan Ayew","Sulley Muntari","Stephen Appiah",
+  "Kwadwo Asamoah","Frederic Kanoute","El Hadji Diouf","Khalilou Fadiga",
+  "Papa Bouba Diop","Henri Camara","Roger Milla","Samuel Kalou",
+  "Samuel Kuffour","Lauren Etame Mayer","Patrick Mboma","Rigobert Song",
+  "Geremi Njitap","Alex Song","Salomon Kalou","Emmanuel Adebayor",
+  "Mohamed Aboutrika","Mohamed Salah","Mohamed Elneny","Essam El-Hadary",
+  "Riyad Mahrez","Sofiane Feghouli","Islam Slimani","Yacine Brahimi",
+  "Sadio Mane","Kalidou Koulibaly","Edouard Mendy","Idrissa Gueye",
+  "Wilfried Zaha","Naby Keita","Hakim Ziyech","Achraf Hakimi",
+  "Mehdi Benatia","Youssef En-Nesyri","Sofyan Amrabat","Yassine Bounou",
+
+  // ── Argentina 2022 World Cup winning squad ──
+  "Emiliano Martinez","Angel Di Maria","Julian Alvarez","Alexis Mac Allister",
+  "Rodrigo De Paul","Leandro Paredes","Nicolas Otamendi","Cristian Romero",
+  "Nahuel Molina","Nicolas Tagliafico","Marcos Acuna","Lautaro Martinez",
+  "Lisandro Martinez","German Pezzella","Franco Armani","Thiago Almada",
+  "Papu Gomez","Angel Correa","Guido Rodriguez","Exequiel Palacios",
+  "Juan Foyth","Gonzalo Montiel","Geronimo Rulli","Lucas Martinez Quarta",
+
+  // ── South American / Argentine legends ──
+  "Diego Maradona","Gabriel Batistuta","Hernan Crespo","Juan Sebastian Veron",
+  "Juan Roman Riquelme","Carlos Tevez","Sergio Aguero","Gonzalo Higuain",
+  "Paulo Dybala","Mario Kempes","Daniel Passarella","Oscar Ruggeri",
+  "Javier Mascherano","Javier Zanetti","Walter Samuel","Roberto Ayala",
+  "Juan Pablo Sorin","Ariel Ortega","Claudio Caniggia","Fernando Redondo",
+
+  // ── Brazilian legends (extended) ──
+  "Zico","Socrates","Falcao","Jairzinho","Carlos Alberto","Tostao",
+  "Romario","Bebeto","Dunga","Taffarel","Aldair","Branco","Mauro Silva",
+  "Rai","Edmundo","Careca","Junior","Leonardo","Denilson","Emerson",
+  "Gilberto Silva","Lucio","Maicon","Thiago Silva","David Luiz","Marquinhos",
+  "Dani Alves","Alex Sandro","Filipe Luis","Willian","Oscar","Coutinho",
+  "Philippe Coutinho","Fred","Firmino","Gabriel Jesus","Richarlison",
+  "Casemiro","Fabinho","Alisson","Ederson","Marquinhos","Eder Militao",
+
+  // ── Uruguay / Chile / Colombia legends ──
+  "Enzo Francescoli","Alvaro Recoba","Diego Forlan","Luis Suarez",
+  "Edinson Cavani","Diego Godin","Jose Gimenez","Federico Valverde",
+  "Fernando Muslera","Ronald Araujo","Rodrigo Bentancur","Lucas Torreira",
+  "Matias Vecino","Giorgian De Arrascaeta","Darwin Nunez","Nicolas de la Cruz",
+  "Arturo Vidal","Alexis Sanchez","Claudio Bravo","Gary Medel",
+  "Charles Aranguiz","Eduardo Vargas","Ivan Zamorano","Marcelo Salas",
+  "Carlos Valderrama","Faustino Asprilla","Rene Higuita","Freddy Rincon",
+  "Radamel Falcao","James Rodriguez","Juan Cuadrado","David Ospina",
+  "Yerry Mina","Davinson Sanchez","Luis Diaz","Luis Muriel",
+
+  // ── Premier League managers (current & recent) ──
+  "Mikel Arteta","Eddie Howe","Marco Silva","David Moyes","Sean Dyche",
+  "Nuno Espirito Santo","Unai Emery","Vincent Kompany","Gary O'Neil",
+  "Enzo Maresca","Ruben Amorim","Andoni Iraola","Fabian Hurzeler",
+  "Russell Martin","Julen Lopetegui","Arne Slot","Ange Postecoglou",
+  "Rob Edwards","Marco Rose","Hansi Flick","Xavi Hernandez","Massimiliano Allegri",
+
+  // ── Women's football stars (extended) ──
+  "Aitana Bonmati","Jenni Hermoso","Jennifer Hermoso","Olga Carmona",
+  "Salma Paralluelo","Mariona Caldentey","Cata Coll","Irene Paredes",
+  "Ona Batlle","Laia Codina","Teresa Abelleira","Patri Guijarro",
+  "Ivana Andres","Alba Redondo","Esther Gonzalez","Eva Navarro",
+  "Athenea del Castillo","Oihane Hernandez","Misa Rodriguez","Rocio Galvez",
+  "Mary Earps","Keira Walsh","Georgia Stanway","Alessia Russo",
+  "Rachel Daly","Chloe Kelly","Ella Toone","Alex Greenwood",
+  "Jess Carter","Esme Morgan","Mary Fowler","Caitlin Foord",
+  "Ellie Carpenter","Steph Catley","Hayley Raso","Katrina Gorry",
+  "Cortnee Vine","Kyra Cooney-Cross","Trinity Rodman","Sophia Smith",
+  "Naomi Girma","Rose Lavelle","Lindsey Horan","Crystal Dunn",
+  "Cristiane","Birgit Prinz","Michelle Akers","Bettina Wiegmann",
+  "Carli Lloyd","Heidi Mohr","Sun Wen","Hope Solo","Christine Sinclair",
+
+  // ── Asian football heroes ──
+  "Park Ji-sung","Son Heung-min","Shinji Kagawa","Hidetoshi Nakata",
+  "Keisuke Honda","Maya Yoshida","Takumi Minamino","Shunsuke Nakamura",
+  "Yasuhito Endo","Makoto Hasebe","Shinji Okazaki","Yuto Nagatomo",
+  "Wataru Endo","Daichi Kamada","Takefusa Kubo","Kaoru Mitoma",
+  "Ritsu Doan","Ao Tanaka","Eiji Kawashima","Junichi Inamoto",
+  "Kazuyoshi Miura","Masami Ihara","Hong Myung-bo","Lee Woon-jae",
+  "Ahn Jung-hwan","Lee Young-pyo","Ki Sung-yueng","Lee Chung-yong",
+  "Park Chu-young","Kim Min-jae","Lee Kang-in","Hwang Hee-chan",
+  "Hwang Sun-hong","Yoo Sang-chul","Seol Ki-hyeon","Kim Nam-il",
+  "Choi Jin-cheul","Lee Chun-soo","Song Chong-gug","Cha Du-ri",
+  "Kim Tae-young","Lee Min-sung","Kim Byung-ji","Ali Daei",
+  "Ali Karimi","Sardar Azmoun","Mehdi Taremi","Alireza Jahanbakhsh",
+  "Ali Mabkhout","Omar Abdulrahman","Sunil Chhetri","Zheng Zhi",
+  "Hao Haidong","Wu Lei","Mokhtar Dahari","Chanathip Songkrasin",
+
+  // ── MLS & US Soccer legends ──
+  "Chris Wondolowski","Landon Donovan","Clint Dempsey","Tim Howard",
+  "Brian McBride","Jozy Altidore","Michael Bradley","Tyler Adams",
+  "Christian Pulisic","Weston McKennie","Giovanni Reyna","Tim Ream",
+  "Sergino Dest","Yunus Musah","Ricardo Pepi","Folarin Balogun",
+  "Kellyn Acosta","Walker Zimmerman","Matt Turner","Gio Reyna",
+  "Cobi Jones","Eric Wynalda","Claudio Reyna","DaMarcus Beasley",
+  "Tab Ramos","Alexi Lalas","Kasey Keller","Brad Friedel",
+  "Jeff Cunningham","Jaime Moreno","Kei Kamara","Ante Razov",
+  "Taylor Twellman","Bradley Wright-Phillips","Jason Kreis","Carlos Ruiz",
+  "Thierry Henry","David Villa","Rafa Marquez","Zlatan Ibrahimovic",
+  "Drake Callender","DeAndre Yedlin","Leonardo Campana","Robert Taylor",
+  "Diego Gomez","Federico Redondo","Matias Rojas","Facundo Farias",
+  "Julian Gressel","Noah Allen","Tomas Aviles","Serhiy Kryvtsov",
+  "Nicolas Freire","Benjamin Cremaschi","David Ruiz",
+
+  // ── Italian legends (extended, Serie A & AC Milan dynasty) ──
+  "Silvio Piola","Gunnar Nordahl","Giuseppe Meazza","Jose Altafini",
+  "Kurt Hamrin","Giuseppe Signori","Antonio Di Natale","Ruud Gullit",
+  "Frank Rijkaard","Roberto Donadoni","Alessandro Costacurta","Mauro Tassotti",
+  "Daniele Massaro","Giovanni Galli","Filippo Galli","Pietro Paolo Virdis",
+  "Angelo Colombo","Alberigo Evani","Andrea Pazzagli","Graziano Mannari",
+  "Christian Lantignotti","Gianni Rivera","Sandro Mazzola","Giacinto Facchetti",
+  "Paolo Rossi","Marco Tardelli","Franco Causio","Enzo Bearzot",
+  "Arrigo Sacchi","Fabio Capello","Marcello Lippi","Gianluca Vialli",
+  "Roberto Mancini","Gennaro Gattuso","Andrea Barzagli","Claudio Marchisio",
+  "Gianfranco Zola","Christian Vieri","Filippo Inzaghi","Simone Inzaghi",
+  "Massimo Ambrosini","Demetrio Albertini","Fernando De Napoli","Gianluca Pagliuca",
+
+  // ── German legends (extended, Bundesliga & Die Mannschaft) ──
+  "Klaus Fischer","Jupp Heynckes","Manfred Burgsmuller","Claudio Pizarro",
+  "Ulf Kirsten","Stefan Kuntz","Dieter Muller","Paul Breitner",
+  "Fritz Walter","Helmut Rahn","Uwe Seeler","Gunter Netzer",
+  "Wolfgang Overath","Berti Vogts","Sepp Maier","Oliver Kahn",
+  "Andreas Brehme","Rudi Voller","Klaus Augenthaler","Jurgen Klinsmann",
+  "Lothar Matthaus","Michael Ballack","Oliver Bierhoff","Stefan Effenberg",
+  "Mehmet Scholl","Dietmar Hamann","Torsten Frings","Tim Borowski",
+  "Kai Havertz","Serge Gnabry","Leroy Sane","Timo Werner",
+  "Florian Wirtz","Leon Goretzka","Niklas Sule","Antonio Rudiger",
+  "Ilkay Gundogan","Marco Reus","Karl-Heinz Schnellinger","Matthias Sammer",
+  "Kevin Grosskreutz",
+
+  // ── Dutch legends (extended, Total Football & Oranje) ──
+  "Memphis Depay","Klaas-Jan Huntelaar","Faas Wilkes","Abe Lenstra",
+  "Beb Bakhuys","Edwin van der Sar","Frank de Boer","Ronald de Boer",
+  "Edgar Davids","Jari Litmanen","Danny Blind","Finidi George",
+  "Michael Reiziger","Winston Bogarde","Peter van Vossen","Frank Verlaat",
+  "John Veldman","Fred Grim","Jaap Stam","Wesley Sneijder",
+  "Arjen Robben","Rafael van der Vaart","Dirk Kuyt","Pierre van Hooijdonk",
+  "Roy Makaay","Phillip Cocu","Giovanni van Bronckhorst","Ronald Koeman",
+  "Erwin Koeman","Johan Neeskens","Ruud Krol","Rob Rensenbrink",
+  "Wim Suurbier","Willy van de Kerkhof","Rene van de Kerkhof","Arnold Muhren",
+  "Gerrit Muhren","Wim Jansen","Rinus Michels","Louis van Gaal",
+  "Dick Advocaat","Guus Hiddink","Bert van Marwijk","Matthijs de Ligt",
+  "Frenkie de Jong","Denzel Dumfries","Cody Gakpo","Xavi Simons",
+  "Donyell Malen","Nathan Ake","Stefan de Vrij","Daley Blind",
+
+  // ── Ballon d'Or winners (additions) ──
+  "Stanley Matthews","Raymond Kopa","Luis Suarez Miramontes","Omar Sivori",
+  "Josef Masopust","Denis Law","Florian Albert","Igor Belanov",
+  "Jean-Pierre Papin","Hristo Stoichkov","Luis Figo","Pavel Nedved",
+
+  // ── World Cup legends (additions) ──
+  "Teofilo Cubillas","Leonidas","Grzegorz Lato","Davor Suker",
+  "Oleg Salenko","Helmut Haller","Didi","Vava","Jairzinho","Nilton Santos",
+  "Francisco Gento","Jose Nasazzi","Obdulio Varela","Dragan Dzajic",
+  "Tomas Brolin","Hakan Sukur","Geoff Hurst","Nobby Stiles","Alan Ball",
+
+  // ── DAYs 19-24 additions (PLAYER_DB sweep, 30 April 2026) ──
+
+  // Portugal — Selecção das Quinas (DAY 19)
+  "Pauleta","Eusébio","Nuno Gomes","Rui Costa","Helder Postiga",
+  "Simao Sabrosa","Simão Sabrosa","Fernando Peyroteo","Joao Felix","João Félix",
+  "Eder Lopes","Renato Sanches","Rui Patricio","Rui Patrício",
+  "Ricardo Quaresma","Joao Moutinho","João Moutinho","Anthony Lopes",
+  "Pepe Laveran","Bruno Alves","Adrien Silva","Joao Mario",
+
+  // Hungary — Mighty Magyars (DAY 20)
+  "Nandor Hidegkuti","Nándor Hidegkuti","Zoltan Czibor","Zoltán Czibor",
+  "Jozsef Bozsik","József Bozsik","Imre Schlosser","Lajos Tichy",
+  "Gyorgy Sarosi","Gyula Zsengeller","Gyula Lorant",
+
+  // Bulgaria & Yugoslavia (DAY 20)
+  "Emil Kostadinov","Yordan Letchkov","Krasimir Balakov","Trifon Ivanov",
+  "Borislav Mihaylov","Lyuboslav Penev","Drazan Jerkovic","Robert Prosinecki",
+  "Predrag Mijatovic","Dejan Savicevic","Sinisa Mihajlovic",
+
+  // Scandinavia — Denmark 1992 & Sweden 1994 (DAY 21)
+  "Sven Rydell","Henrik Larsson","Gunnar Gren","Marcus Berg",
+  "Bertil Nordahl","Carl-Erik Palmgren","Per Kaufeldt","Nils Liedholm",
+  "Martin Dahlin","Kennet Andersson","Patrik Andersson","Stefan Schwarz",
+  "Jonas Thern","Roland Nilsson",
+  "Kasper Schmeichel","Brian Laudrup","Michael Laudrup",
+  "Kim Vilfort","John Jensen","Lars Olsen","Lars Elstrup",
+  "Henrik Andersen","John Sivebaek","Kim Christofte","Flemming Povlsen",
+  "Kent Nielsen","Torben Piechnik","Bent Christensen","Per Frimann",
+  "Bjarne Goldbaek","Claus Christiansen","Claus Larsen","Jens Martin Knudsen",
+  "Kjetil Rekdal","Tore Andre Flo","John Carew",
+
+  // Argentina 1986 World Cup squad (DAY 22)
+  "Luis Artime","Leopoldo Luque","Jorge Burruchaga","Jorge Valdano",
+  "Nery Pumpido","Sergio Batista","Ricardo Giusti","Jose Luis Brown",
+  "Julio Olarticoechea","Pedro Pasculli","Oscar Garre",
+  "Sergio Almiron","Carlos Tapia","Marcelo Trobbiani","Jose Cuciuffo",
+  "Claudio Borghi","Hector Zelada","Luis Islas","Nestor Clausen",
+  "Ricardo Bochini","Ubaldo Fillol",
+
+  // Liverpool 2005 'Miracle of Istanbul' (DAY 23)
+  "Jerzy Dudek","Sami Hyypia","Luis Garcia","Jamie Carragher",
+  "John Arne Riise","Steve Finnan","Vladimir Smicer","Djimi Traore",
+  "Milan Baros","Djibril Cisse","Harry Kewell","Igor Biscan",
+  "Antonio Nunez","Florent Sinama Pongolle","Scott Carson","Josemi",
+  "Pepe Reina","Mauricio Pellegrino","Bolo Zenden",
+
+  // Leicester 2015-16 Premier League winners (DAY 24)
+  "Jamie Vardy","Wes Morgan","Robert Huth","Christian Fuchs",
+  "Danny Drinkwater","Marc Albrighton","Danny Simpson","Andy King",
+  "Leonardo Ulloa","Jeffrey Schlupp","Daniel Amartey","Demarai Gray",
+  "Nathan Dyer","Gokhan Inler","Yohan Benalouane","Ben Chilwell",
+
+  // Manager additions (PL & European)
+  "Manuel Pellegrini","Andre Villas-Boas","Carlos Queiroz","Fernando Santos",
+  "Bora Milutinovic","Cesar Luis Menotti","Carlos Bilardo",
+  "Marcelo Bielsa","Tite","Lionel Scaloni","Tata Martino",
+  "Luis Aragones","Roberto Martinez","Paulo Bento",
+
+  // Additional World Cup era legends not yet listed
+  "Hugo Sanchez",
+
+  // ── DAYs 25-27 additions (PLAYER_DB sweep, 2 May 2026) ──
+
+  // Argentina 2022 World Cup squad — DAY 25
+  "Emiliano Martinez","Emi Martinez","Julian Alvarez","Julián Álvarez",
+  "Rodrigo De Paul","Enzo Fernandez","Enzo Fernández","Alexis Mac Allister",
+  "Cristian Romero","Cuti Romero","Nicolas Otamendi","Nicolás Otamendi",
+  "Lisandro Martinez","Lisandro Martínez","Leandro Paredes","Marcos Acuna",
+  "Marcos Acuña","Nahuel Molina","Nicolas Tagliafico","Nicolás Tagliafico",
+  "Paulo Dybala","Papu Gomez","Geronimo Rulli","Gerónimo Rulli",
+  "Angel Correa","Ángel Correa","Exequiel Palacios","German Pezzella",
+  "Germán Pezzella","Joaquin Correa","Joaquín Correa","Walid Regragui",
+  "Randal Kolo Muani","Cody Gakpo","Enner Valencia","Bukayo Saka",
+
+  // La Liga & El Clásico — DAY 26
+  "Telmo Zarra","Cesar Rodriguez","César Rodríguez","Quini","Pahino","Pahíño",
+  "Ederson Moraes","Vinicius Junior","Vinícius Júnior","Eder Militao","Éder Militão",
+  "Federico Valverde","Marco Asensio","Eduardo Camavinga","Ferland Mendy",
+  "Nacho Fernandez","Nacho Fernández","Lucas Vazquez","Lucas Vázquez",
+  "Eden Hazard","Iker Casillas",
+
+  // Les Bleus — DAY 27 (France 1998 squad + France greats)
+  "Just Fontaine","Roger Piantoni","Raymond Kopa","Jean Vincent",
+  "Stephane Guivarc'h","Stéphane Guivarc'h","Christophe Dugarry",
+  "Vincent Candela","Bernard Diomede","Bernard Diomède",
+  "Alain Boghossian","Bernard Lama","Lionel Charbonnier",
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7-DAY QUIZ DATABASE
+// ─────────────────────────────────────────────────────────────────────────────
+const QUIZ_DB = [
+  // ── DAY 0 ──────────────────────────────────────────────────────────────────
+  {
+    daily: { title:"PL All-Time Top Scorers", subtitle:"Can you name the top 10?", gameId:"tenable" },
+    tenable: {
+      question:"Top 10 Premier League All-Time Goal Scorers",
+      answers:[
+        {name:"Alan Shearer",rank:1},{name:"Harry Kane",rank:2},{name:"Wayne Rooney",rank:3},
+        {name:"Andrew Cole",rank:4},{name:"Sergio Aguero",rank:5},{name:"Frank Lampard",rank:6},
+        {name:"Thierry Henry",rank:7},{name:"Robbie Fowler",rank:8},{name:"Jermain Defoe",rank:9},
+        {name:"Michael Owen",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from Liverpool's 2019 Champions League winning squad",
+      answers:[
+        {name:"Mohamed Salah",popularity:95},{name:"Virgil van Dijk",popularity:90},
+        {name:"Alisson",popularity:85},{name:"Jordan Henderson",popularity:75},
+        {name:"Roberto Firmino",popularity:70},{name:"Sadio Mane",popularity:80},
+        {name:"Trent Alexander-Arnold",popularity:78},{name:"Andrew Robertson",popularity:65},
+        {name:"Divock Origi",popularity:60},{name:"Joel Matip",popularity:45},
+        {name:"Fabinho",popularity:55},{name:"Georginio Wijnaldum",popularity:50},
+        {name:"James Milner",popularity:48},{name:"Joe Gomez",popularity:40},
+        {name:"Xherdan Shaqiri",popularity:35},{name:"Daniel Sturridge",popularity:30},
+        {name:"Dejan Lovren",popularity:28},{name:"Adam Lallana",popularity:25},
+      ],
+    },
+    careerPath: {
+      clubs:["Sporting CP","Manchester United","Real Madrid","Juventus","Al Nassr"],
+      player:"Cristiano Ronaldo",
+      hints:["5× Ballon d'Or winner","Champions League all-time top scorer","Portuguese captain","Known for his athleticism and dedication"],
+    },
+    mystery: {
+      clues:["Born in 1998","World Cup winner 2018","Plays for Real Madrid","French striker","PSG academy graduate"],
+      player:"Kylian Mbappe",
+      options:["Kylian Mbappe","Antoine Griezmann","Ousmane Dembele","Olivier Giroud"],
+    },
+    trueOrFalse:[
+      {q:"Cristiano Ronaldo has won more Ballon d'Ors than Lionel Messi.",a:false,fact:"Messi has won 8, Ronaldo has won 5."},
+      {q:"Erling Haaland scored 36 Premier League goals in his debut season.",a:true,fact:"He broke the all-time PL single season record in 2022/23."},
+      {q:"Arsenal went the entire 2003/04 Premier League season unbeaten.",a:true,fact:"The Invincibles — 38 games, 26 wins, 12 draws."},
+      {q:"Brazil has won the FIFA World Cup five times.",a:true,fact:"1958, 1962, 1970, 1994 and 2002."},
+      {q:"Harry Kane has won the Premier League.",a:false,fact:"Kane is yet to win a major honour in England."},
+      {q:"Manchester City won the treble in the 2022/23 season.",a:true,fact:"PL, FA Cup and Champions League all in one season."},
+      {q:"Thierry Henry was born in Brazil.",a:false,fact:"Henry was born in Les Ulis, France."},
+      {q:"Real Madrid have won the most Champions League titles.",a:true,fact:"They've won the competition 15 times."},
+    ],
+  },
+  // ── DAY 1 ──────────────────────────────────────────────────────────────────
+  {
+    daily: { title:"Champions League Legends", subtitle:"Who are the all-time CL top scorers?", gameId:"tenable" },
+    tenable: {
+      question:"Top 10 Champions League All-Time Goal Scorers",
+      answers:[
+        {name:"Cristiano Ronaldo",rank:1},{name:"Lionel Messi",rank:2},{name:"Robert Lewandowski",rank:3},
+        {name:"Karim Benzema",rank:4},{name:"Raul",rank:5},{name:"Ruud van Nistelrooy",rank:6},
+        {name:"Thomas Muller",rank:7},{name:"Thierry Henry",rank:8},{name:"Andriy Shevchenko",rank:9},
+        {name:"Zlatan Ibrahimovic",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from France's 2018 World Cup winning squad",
+      answers:[
+        {name:"Hugo Lloris",popularity:88},{name:"Raphael Varane",popularity:85},
+        {name:"N'Golo Kante",popularity:82},{name:"Paul Pogba",popularity:80},
+        {name:"Kylian Mbappe",popularity:96},{name:"Antoine Griezmann",popularity:90},
+        {name:"Olivier Giroud",popularity:72},{name:"Benjamin Pavard",popularity:60},
+        {name:"Lucas Hernandez",popularity:58},{name:"Presnel Kimpembe",popularity:42},
+        {name:"Samuel Umtiti",popularity:50},{name:"Blaise Matuidi",popularity:55},
+        {name:"Ousmane Dembele",popularity:65},{name:"Thomas Lemar",popularity:35},
+        {name:"Nabil Fekir",popularity:30},{name:"Steven N'Zonzi",popularity:20},
+        {name:"Corentin Tolisso",popularity:28},{name:"Florian Thauvin",popularity:22},
+      ],
+    },
+    careerPath: {
+      clubs:["Ajax","Juventus","Inter Milan","Barcelona","AC Milan","Paris Saint-Germain","Manchester United","LA Galaxy","AC Milan","Hammarby"],
+      player:"Zlatan Ibrahimovic",
+      hints:["Swedish international","Known for his acrobatic goals","Never won the World Cup","His autobiography is titled 'I am Zlatan'"],
+    },
+    mystery: {
+      clues:["Born in Norway in 2000","Father also a professional footballer","Scored 44 goals in 40 games at Dortmund","Signed for Manchester City in 2022","Broke the PL scoring record"],
+      player:"Erling Haaland",
+      options:["Erling Haaland","Vinicius Junior","Pedri","Gavi"],
+    },
+    trueOrFalse:[
+      {q:"Zlatan Ibrahimovic has won the World Cup with Sweden.",a:false,fact:"Sweden never won the World Cup and Zlatan retired from internationals in 2016."},
+      {q:"The Champions League was previously called the European Cup.",a:true,fact:"It was rebranded to the UEFA Champions League in 1992."},
+      {q:"Kylian Mbappe was the first teenager to score in a World Cup final since Pelé.",a:true,fact:"Mbappe scored in the 2018 final at just 19 years old."},
+      {q:"Manchester United have won the most Premier League titles.",a:true,fact:"United have won 20 league titles, 13 of which came under Sir Alex Ferguson."},
+      {q:"France has won three World Cups.",a:false,fact:"France have won two World Cups: 1998 and 2018."},
+      {q:"Luis Suarez once bit an opponent in a World Cup match.",a:true,fact:"Suarez bit Italy's Giorgio Chiellini at the 2014 World Cup."},
+      {q:"Barcelona won La Liga, Copa del Rey and Champions League in 2009.",a:true,fact:"The Pep Guardiola treble — the first treble in Spanish football history."},
+      {q:"Lionel Messi won the 2022 World Cup with Argentina.",a:true,fact:"Messi finally lifted the trophy in Qatar, defeating France on penalties."},
+    ],
+  },
+  // ── DAY 2 ──────────────────────────────────────────────────────────────────
+  {
+    daily: { title:"World Cup Top Scorers", subtitle:"Guess all 10 all-time top scorers!", gameId:"tenable" },
+    tenable: {
+      question:"Top 10 World Cup All-Time Goal Scorers",
+      answers:[
+        {name:"Miroslav Klose",rank:1},{name:"Ronaldo Nazario",rank:2},{name:"Gerd Muller",rank:3},
+        {name:"Just Fontaine",rank:4},{name:"Pele",rank:5},{name:"Sandor Kocsis",rank:6},
+        {name:"Kylian Mbappe",rank:7},{name:"Helmut Rahn",rank:8},{name:"Teofilo Cubillas",rank:9},
+        {name:"Gary Lineker",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from Manchester City's 2022/23 treble-winning squad",
+      answers:[
+        {name:"Erling Haaland",popularity:96},{name:"Kevin De Bruyne",popularity:90},
+        {name:"Phil Foden",popularity:85},{name:"Rodri",popularity:80},
+        {name:"Bernardo Silva",popularity:75},{name:"Jack Grealish",popularity:72},
+        {name:"Ilkay Gundogan",popularity:68},{name:"John Stones",popularity:65},
+        {name:"Kyle Walker",popularity:62},{name:"Ederson",popularity:70},
+        {name:"Manuel Akanji",popularity:40},{name:"Rico Lewis",popularity:30},
+        {name:"Stefan Ortega",popularity:18},{name:"Sergio Gomez",popularity:22},
+        {name:"Nathan Ake",popularity:45},{name:"Matheus Nunes",popularity:35},
+        {name:"Kalvin Phillips",popularity:48},{name:"Julian Alvarez",popularity:60},
+      ],
+    },
+    careerPath: {
+      clubs:["Manchester United","Real Madrid","AC Milan","Paris Saint-Germain","LA Galaxy","AC Milan","Queens Park Rangers"],
+      player:"David Beckham",
+      hints:["Married a Spice Girl","England captain","Famous free kicks","Co-owner of Inter Miami"],
+    },
+    mystery: {
+      clues:["Born in Brazil in 1980","Won the Ballon d'Or in 2005","Known for his no-look passes and tricks","Had a spell at Barcelona","Retired in 2015"],
+      player:"Ronaldinho",
+      options:["Ronaldinho","Rivaldo","Ronaldo Nazario","Roberto Carlos"],
+    },
+    trueOrFalse:[
+      {q:"David Beckham was never the England captain.",a:false,fact:"Beckham captained England 59 times between 2000 and 2006."},
+      {q:"Miroslav Klose is the World Cup's all-time top scorer.",a:true,fact:"Klose scored 16 goals across four World Cups for Germany."},
+      {q:"Leicester City won the Premier League in the 2015/16 season as 5000/1 outsiders.",a:true,fact:"One of the greatest sporting upsets of all time."},
+      {q:"The penalty spot is 12 yards from the goal line.",a:true,fact:"The penalty spot is exactly 12 yards (11 metres) from goal."},
+      {q:"Arsenal's Invincibles only drew 3 games in their unbeaten season.",a:false,fact:"Arsenal drew 12 games in their 38-match unbeaten season."},
+      {q:"Ronaldinho won the World Cup with Brazil.",a:true,fact:"Ronaldinho was part of Brazil's 2002 World Cup winning squad."},
+      {q:"Pele won three World Cups.",a:true,fact:"Pele won in 1958, 1962 and 1970 with Brazil."},
+      {q:"The first World Cup was held in Brazil.",a:false,fact:"The first World Cup was held in Uruguay in 1930."},
+    ],
+  },
+  // ── DAY 3 ──────────────────────────────────────────────────────────────────
+  {
+    daily: { title:"Record Transfers", subtitle:"Name the most expensive transfers ever!", gameId:"tenable" },
+    tenable: {
+      question:"Top 10 Most Expensive Football Transfers (All Time)",
+      answers:[
+        {name:"Neymar",rank:1},{name:"Kylian Mbappe",rank:2},{name:"Joao Felix",rank:3},
+        {name:"Enzo Fernandez",rank:4},{name:"Antony",rank:5},{name:"Jack Grealish",rank:6},
+        {name:"Paul Pogba",rank:7},{name:"Romelu Lukaku",rank:8},{name:"Ousmane Dembele",rank:9},
+        {name:"Phillipe Coutinho",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from Real Madrid's 2021/22 Champions League winning squad",
+      answers:[
+        {name:"Karim Benzema",popularity:90},{name:"Luka Modric",popularity:88},
+        {name:"Thibaut Courtois",popularity:85},{name:"Vinicius Junior",popularity:82},
+        {name:"Casemiro",popularity:78},{name:"Federico Valverde",popularity:65},
+        {name:"David Alaba",popularity:68},{name:"Ferland Mendy",popularity:50},
+        {name:"Eder Militao",popularity:55},{name:"Nacho",popularity:45},
+        {name:"Eduardo Camavinga",popularity:60},{name:"Marco Asensio",popularity:48},
+        {name:"Rodrygo",popularity:62},{name:"Dani Carvajal",popularity:58},
+        {name:"Toni Kroos",popularity:80},{name:"Gareth Bale",popularity:70},
+        {name:"Isco",popularity:40},{name:"Marcelo",popularity:65},
+      ],
+    },
+    careerPath: {
+      clubs:["Monaco","Juventus","Arsenal","Barcelona","New York Red Bulls","Arsenal"],
+      player:"Thierry Henry",
+      hints:["France's all-time top scorer","Premier League legend","2003 and 2004 PFA Players' Player of the Year","Infamous handball in World Cup qualifier"],
+    },
+    mystery: {
+      clues:["Born in France in 1972","Won the World Cup in 1998 and Euro 2000","Known as 'Zizou'","Headbutted Marco Materazzi in the 2006 World Cup final","Managed Real Madrid to three consecutive CL titles"],
+      player:"Zinedine Zidane",
+      options:["Zinedine Zidane","Laurent Blanc","Lilian Thuram","Patrick Vieira"],
+    },
+    trueOrFalse:[
+      {q:"Neymar's transfer from Barcelona to PSG in 2017 broke the world record.",a:true,fact:"The €222m fee remains the most expensive transfer of all time."},
+      {q:"Zinedine Zidane won the Ballon d'Or three times.",a:false,fact:"Zidane won the Ballon d'Or once, in 1998."},
+      {q:"Liverpool have won more European Cups than any other English club.",a:true,fact:"Liverpool have won 6 European Cups / Champions Leagues."},
+      {q:"Paul Pogba returned to Juventus after leaving Manchester United.",a:true,fact:"Pogba rejoined Juventus on a free transfer in 2022."},
+      {q:"The offside rule requires at least two defenders between the attacker and goal.",a:true,fact:"The attacker must have at least two opponents (usually keeper + one) between them and the goal."},
+      {q:"Thierry Henry scored more than 200 Premier League goals.",a:false,fact:"Henry scored 175 Premier League goals — still a record for Arsenal."},
+      {q:"Real Madrid won three consecutive Champions Leagues from 2016 to 2018.",a:true,fact:"They won in 2016, 2017 and 2018 under Zinedine Zidane."},
+      {q:"Jack Grealish joined Manchester City for £100 million.",a:true,fact:"The £100m fee in 2021 was a British transfer record at the time."},
+    ],
+  },
+  // ── DAY 4 ──────────────────────────────────────────────────────────────────
+  {
+    daily: { title:"England Caps", subtitle:"Name England's most capped players!", gameId:"tenable" },
+    tenable: {
+      question:"Top 10 Most Capped England Players (All Time)",
+      answers:[
+        {name:"Peter Shilton",rank:1},{name:"Wayne Rooney",rank:2},{name:"David Beckham",rank:3},
+        {name:"Steven Gerrard",rank:4},{name:"Bobby Moore",rank:5},{name:"Bobby Charlton",rank:6},
+        {name:"Frank Lampard",rank:7},{name:"Billy Wright",rank:8},{name:"Ashley Cole",rank:9},
+        {name:"John Terry",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from the Arsenal Invincibles 2003/04 unbeaten squad",
+      answers:[
+        {name:"Thierry Henry",popularity:95},{name:"Patrick Vieira",popularity:85},
+        {name:"Robert Pires",popularity:78},{name:"Ashley Cole",popularity:80},
+        {name:"Sol Campbell",popularity:75},{name:"Dennis Bergkamp",popularity:82},
+        {name:"Freddie Ljungberg",popularity:65},{name:"Jens Lehmann",popularity:60},
+        {name:"Lauren",popularity:40},{name:"Martin Keown",popularity:45},
+        {name:"Lee Dixon",popularity:42},{name:"Sylvain Wiltord",popularity:38},
+        {name:"Gilberto Silva",popularity:50},{name:"Edu",popularity:30},
+        {name:"Jose Antonio Reyes",popularity:35},{name:"Pascal Cygan",popularity:15},
+        {name:"Gael Clichy",popularity:28},{name:"Kanu",popularity:55},
+      ],
+    },
+    careerPath: {
+      clubs:["Everton","Manchester United","Newcastle United","Everton","DC United","Everton"],
+      player:"Wayne Rooney",
+      hints:["Scored a bicycle kick against Manchester City","England's all-time top scorer","Made his Premier League debut aged 16","Won 5 Premier League titles"],
+    },
+    mystery: {
+      clues:["Born in Seville in 1984","Won 3 World Cups and 2 European Championships in one decade","Played most of his career at one club","Famous for his vision and passing in midfield","Retired in 2015"],
+      player:"Andres Iniesta",
+      options:["Andres Iniesta","Xavi Hernandez","David Silva","Cesc Fabregas"],
+    },
+    trueOrFalse:[
+      {q:"Peter Shilton played more than 1,000 professional games.",a:true,fact:"Shilton made 1,005 league appearances — a Football League record."},
+      {q:"Wayne Rooney scored on his England debut.",a:true,fact:"Rooney scored against Australia in his debut in 2003, aged 17."},
+      {q:"Arsenal's Invincibles went 49 league games unbeaten across two seasons.",a:true,fact:"The unbeaten run stretched from 2003 to 2004, ending at 49 games."},
+      {q:"England have won the World Cup twice.",a:false,fact:"England have won the World Cup just once, in 1966 on home soil."},
+      {q:"Andres Iniesta scored the winning goal in the 2010 World Cup final.",a:true,fact:"His extra-time goal won Spain the World Cup against the Netherlands."},
+      {q:"Steven Gerrard won the Premier League with Liverpool.",a:false,fact:"Gerrard never won the Premier League — his biggest regret."},
+      {q:"Sol Campbell played for both Tottenham Hotspur and Arsenal.",a:true,fact:"He infamously moved to rivals Arsenal on a free in 2001."},
+      {q:"Chelsea have won the Champions League once.",a:false,fact:"Chelsea have won the Champions League twice: 2012 and 2021."},
+    ],
+  },
+  // ── DAY 5 ──────────────────────────────────────────────────────────────────
+  {
+    daily: { title:"Barcelona's Treble", subtitle:"Name the 2009 treble winners!", gameId:"pointless" },
+    tenable: {
+      question:"Top 10 Premier League Managers by Trophies Won",
+      answers:[
+        {name:"Sir Alex Ferguson",rank:1},{name:"Jose Mourinho",rank:2},{name:"Arsene Wenger",rank:3},
+        {name:"Pep Guardiola",rank:4},{name:"Kenny Dalglish",rank:5},{name:"Carlo Ancelotti",rank:6},
+        {name:"Howard Wilkinson",rank:7},{name:"George Graham",rank:8},{name:"Roberto Mancini",rank:9},
+        {name:"Claudio Ranieri",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from Barcelona's 2008/09 treble-winning squad",
+      answers:[
+        {name:"Lionel Messi",popularity:98},{name:"Xavi Hernandez",popularity:90},
+        {name:"Andres Iniesta",popularity:88},{name:"Samuel Eto'o",popularity:80},
+        {name:"Thierry Henry",popularity:82},{name:"Dani Alves",popularity:75},
+        {name:"Gerard Pique",popularity:72},{name:"Carles Puyol",popularity:65},
+        {name:"Victor Valdes",popularity:55},{name:"Seydou Keita",popularity:40},
+        {name:"Yaya Toure",popularity:70},{name:"Sylvinho",popularity:20},
+        {name:"Eric Abidal",popularity:45},{name:"Sergio Busquets",popularity:68},
+        {name:"Pedro",popularity:50},{name:"Jose Manuel Pinto",popularity:10},
+        {name:"Rafael Marquez",popularity:35},{name:"Hleb",popularity:25},
+      ],
+    },
+    careerPath: {
+      clubs:["Real Betis","Chelsea","Atletico Madrid","Liverpool","Chelsea","AC Milan","Atletico Madrid"],
+      player:"Fernando Torres",
+      hints:["Spanish World Cup and Euro winner","Scored the winning goal in Euro 2008 final","Famous 'El Nino' nickname","His transfer to Chelsea was a British record at the time"],
+    },
+    mystery: {
+      clues:["Born in Whiston, England in 1980","Won the Champions League in dramatic fashion in Istanbul","Captain of his club for over a decade","Never won the Premier League","Moved to MLS late in his career"],
+      player:"Steven Gerrard",
+      options:["Steven Gerrard","Frank Lampard","Paul Scholes","Jamie Carragher"],
+    },
+    trueOrFalse:[
+      {q:"Sir Alex Ferguson won 13 Premier League titles.",a:true,fact:"Ferguson won 13 of the 20 PL titles available during his tenure."},
+      {q:"Fernando Torres scored against Real Madrid in the Copa del Rey final.",a:false,fact:"Torres scored the winning goal in the 2008 Euro final against Germany."},
+      {q:"Barcelona's 2009 treble was the first treble in Spanish football history.",a:true,fact:"No Spanish club had ever won La Liga, Copa del Rey and the CL in one season before."},
+      {q:"Pep Guardiola played as a goalkeeper for Barcelona.",a:false,fact:"Guardiola was a central midfielder, the pivot of the famous Cruyff Dream Team."},
+      {q:"Steven Gerrard slipped during the 2013/14 season which cost Liverpool the title.",a:true,fact:"The infamous slip against Chelsea handed Mourinho's side a critical 2-0 win."},
+      {q:"Jose Mourinho has won the Champions League with two different clubs.",a:true,fact:"Mourinho won it with Porto in 2004 and Inter Milan in 2010."},
+      {q:"Claudio Ranieri was sacked before Leicester won the title in 2015/16.",a:false,fact:"Ranieri managed Leicester to their title triumph in 2016."},
+      {q:"Samuel Eto'o played for Barcelona, Inter Milan and Chelsea.",a:true,fact:"Eto'o had a remarkable career spanning those three clubs."},
+    ],
+  },
+  // ── DAY 7 ──────────────────────────────────────────────────────────────────
+  {
+    daily: { title:"Champions League Royalty", subtitle:"Which clubs have won it most?", gameId:"tenable" },
+    tenable: {
+      question:"Top 10 Clubs with Most Champions League / European Cup Titles",
+      answers:[
+        {name:"Real Madrid",rank:1},{name:"AC Milan",rank:2},{name:"Liverpool",rank:3},
+        {name:"Bayern Munich",rank:4},{name:"Barcelona",rank:5},{name:"Ajax",rank:6},
+        {name:"Manchester United",rank:7},{name:"Inter Milan",rank:8},{name:"Juventus",rank:9},
+        {name:"Chelsea",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from Germany's 2014 World Cup winning squad",
+      answers:[
+        {name:"Manuel Neuer",popularity:92},{name:"Thomas Muller",popularity:88},
+        {name:"Toni Kroos",popularity:87},{name:"Mesut Ozil",popularity:84},
+        {name:"Bastian Schweinsteiger",popularity:82},{name:"Mario Gotze",popularity:80},
+        {name:"Mats Hummels",popularity:78},{name:"Miroslav Klose",popularity:85},
+        {name:"Lukas Podolski",popularity:72},{name:"Philipp Lahm",popularity:75},
+        {name:"Jerome Boateng",popularity:70},{name:"Sami Khedira",popularity:65},
+        {name:"Andre Schurrle",popularity:55},{name:"Julian Draxler",popularity:52},
+        {name:"Per Mertesacker",popularity:60},{name:"Benedikt Howedes",popularity:35},
+        {name:"Christoph Kramer",popularity:30},{name:"Erik Durm",popularity:20},
+      ],
+    },
+    careerPath: {
+      clubs:["Palmeiras","Inter Milan","Real Madrid","Fenerbahce","Anzhi Makhachkala"],
+      player:"Roberto Carlos",
+      hints:["Brazilian left-back","Famous for his thunderous, swerving free kick against France in 1997","Won 4 La Liga titles and 3 Champions Leagues with Real Madrid","Part of Brazil's 2002 World Cup winning squad"],
+    },
+    mystery: {
+      clues:["Born in Moscow in 1929","The only goalkeeper in history to win the Ballon d'Or (1963)","Nicknamed 'The Black Spider' for his uncanny reach","Played his entire career for Dynamo Moscow","Won Olympic gold with the Soviet Union in 1956"],
+      player:"Lev Yashin",
+      options:["Lev Yashin","Peter Schmeichel","Gordon Banks","Dino Zoff"],
+    },
+    trueOrFalse:[
+      {q:"Real Madrid have won the Champions League more than any other club.",a:true,fact:"Real Madrid have won it 15 times, far ahead of AC Milan in second with 7."},
+      {q:"Lev Yashin is the only goalkeeper ever to win the Ballon d'Or.",a:true,fact:"Yashin won it in 1963 — no goalkeeper has won it since."},
+      {q:"Mario Gotze scored the winning goal in the 2014 World Cup final.",a:true,fact:"Gotze came off the bench to score a sublime chest and volley in extra time."},
+      {q:"Bayern Munich have won the Champions League four times.",a:false,fact:"Bayern have won it six times: 1974, 1975, 1976, 2001, 2013 and 2020."},
+      {q:"Germany beat Brazil 7-1 in the 2014 World Cup semi-final.",a:true,fact:"The 'Mineirazo' — arguably the most shocking result in World Cup history."},
+      {q:"Manchester United's first European Cup win was in 1999.",a:false,fact:"United first won it in 1968 under Sir Matt Busby, beating Benfica 4-1 at Wembley."},
+      {q:"Celtic were the first British club to win the European Cup.",a:true,fact:"The Lisbon Lions beat Inter Milan 2-1 in 1967 — and all 11 players were born within 30 miles of Celtic Park."},
+      {q:"Roberto Carlos played as a right-back for Brazil and Real Madrid.",a:false,fact:"Roberto Carlos was a left-back, one of the greatest to ever play the position."},
+    ],
+  },
+  // ── DAY 8 ──────────────────────────────────────────────────────────────────
+  {
+    daily: { title:"Spain's Golden Decade", subtitle:"Can you name their 2010 World Cup winners?", gameId:"pointless" },
+    tenable: {
+      question:"Top 10 Clubs with Most FA Cup Wins",
+      answers:[
+        {name:"Arsenal",rank:1},{name:"Manchester United",rank:2},{name:"Liverpool",rank:3},
+        {name:"Chelsea",rank:4},{name:"Tottenham Hotspur",rank:5},{name:"Aston Villa",rank:6},
+        {name:"Blackburn Rovers",rank:7},{name:"Newcastle United",rank:8},{name:"Everton",rank:9},
+        {name:"West Bromwich Albion",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from Spain's 2010 FIFA World Cup winning squad",
+      answers:[
+        {name:"Iker Casillas",popularity:90},{name:"Sergio Ramos",popularity:88},
+        {name:"Xavi Hernandez",popularity:92},{name:"Andres Iniesta",popularity:90},
+        {name:"David Villa",popularity:85},{name:"Fernando Torres",popularity:82},
+        {name:"Xabi Alonso",popularity:80},{name:"David Silva",popularity:78},
+        {name:"Carles Puyol",popularity:75},{name:"Gerard Pique",popularity:72},
+        {name:"Sergio Busquets",popularity:68},{name:"Pedro",popularity:62},
+        {name:"Joan Capdevila",popularity:40},{name:"Alvaro Arbeloa",popularity:38},
+        {name:"Fernando Llorente",popularity:45},{name:"Raul Albiol",popularity:35},
+        {name:"Santi Cazorla",popularity:55},{name:"Jesus Navas",popularity:50},
+      ],
+    },
+    careerPath: {
+      clubs:["Ajax","Juventus","Fulham","Manchester United"],
+      player:"Edwin van der Sar",
+      hints:["Dutch international goalkeeper","Set a record of 1,311 minutes without conceding in the Premier League","Won the Champions League with Ajax in 1995 and Manchester United in 2008","Saved Nicolas Anelka's penalty in the 2008 CL final shootout"],
+    },
+    mystery: {
+      clues:["Born in Tolosa, Spain in 1981","Won the Champions League with both Liverpool (2005) and Real Madrid (2014, 2016)","Won the World Cup and two European Championships with Spain","Scored a brilliant long-range equaliser against AC Milan in Istanbul","Now manages Bayer Leverkusen to unbeaten Bundesliga season"],
+      player:"Xabi Alonso",
+      options:["Xabi Alonso","Marcos Senna","Xavi Hernandez","Santi Cazorla"],
+    },
+    trueOrFalse:[
+      {q:"Arsenal hold the record for most FA Cup wins.",a:true,fact:"Arsenal have won the FA Cup 14 times — more than any other club."},
+      {q:"Spain won three consecutive major international tournaments between 2008 and 2012.",a:true,fact:"Spain won Euro 2008, the 2010 World Cup and Euro 2012 — an unprecedented treble."},
+      {q:"Andres Iniesta scored the winning goal in the 2010 World Cup final.",a:true,fact:"His extra-time goal beat the Netherlands 1-0 to win Spain their first World Cup."},
+      {q:"Edwin van der Sar played for Arsenal before joining Manchester United.",a:false,fact:"Van der Sar went from Ajax to Juventus, then Fulham, before joining United in 2005."},
+      {q:"David Villa is Spain's all-time record international goalscorer.",a:true,fact:"Villa scored 59 goals for Spain — still the national record."},
+      {q:"The 1923 FA Cup final at Wembley was called the White Horse Final.",a:true,fact:"PC George Scorey on his white horse Billy helped clear the pitch after 300,000 fans packed the new stadium."},
+      {q:"Xabi Alonso never played in the Premier League.",a:false,fact:"Alonso played for Liverpool from 2004 to 2009, before moving to Real Madrid."},
+      {q:"Everton have won the FA Cup more times than Chelsea.",a:false,fact:"Chelsea have won the FA Cup 8 times; Everton have won it 5 times."},
+    ],
+  },
+  // ── DAY 9 ──────────────────────────────────────────────────────────────────
+  {
+    daily: { title:"Euro Kings & Italian Legends", subtitle:"Test your European football knowledge!", gameId:"mystery" },
+    tenable: {
+      question:"Top 10 Nations by Most UEFA European Championship Wins",
+      answers:[
+        {name:"Spain",rank:1},{name:"Germany",rank:2},{name:"France",rank:3},
+        {name:"Italy",rank:4},{name:"Portugal",rank:5},{name:"Greece",rank:6},
+        {name:"Denmark",rank:7},{name:"Netherlands",rank:8},{name:"Czechoslovakia",rank:9},
+        {name:"Soviet Union",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from Italy's UEFA Euro 2020 (2021) winning squad",
+      answers:[
+        {name:"Gianluigi Donnarumma",popularity:88},{name:"Giorgio Chiellini",popularity:82},
+        {name:"Leonardo Bonucci",popularity:80},{name:"Nicolo Barella",popularity:72},
+        {name:"Marco Verratti",popularity:78},{name:"Jorginho",popularity:75},
+        {name:"Lorenzo Insigne",popularity:70},{name:"Ciro Immobile",popularity:72},
+        {name:"Federico Chiesa",popularity:74},{name:"Giovanni Di Lorenzo",popularity:50},
+        {name:"Leonardo Spinazzola",popularity:55},{name:"Alessandro Bastoni",popularity:52},
+        {name:"Manuel Locatelli",popularity:48},{name:"Bryan Cristante",popularity:38},
+        {name:"Matteo Pessina",popularity:35},{name:"Andrea Belotti",popularity:60},
+        {name:"Emerson",popularity:30},{name:"Giacomo Raspadori",popularity:42},
+      ],
+    },
+    careerPath: {
+      clubs:["Brescia","Inter Milan","AC Milan","Juventus","New York City FC","Anderlecht"],
+      player:"Andrea Pirlo",
+      hints:["Italian World Cup winner in 2006","Famous for his vision, technique and precision passing","Known as 'The Architect' for his deep-lying playmaker role","Also briefly managed Juventus between 2020 and 2021"],
+    },
+    mystery: {
+      clues:["Born in Milan in 1968","His father Cesare also played for AC Milan and Italy","Played his entire professional career at one club","Won 7 Serie A titles and 5 Champions Leagues","Named the best defender of the 20th century by the IFFHS"],
+      player:"Paolo Maldini",
+      options:["Paolo Maldini","Franco Baresi","Alessandro Nesta","Fabio Cannavaro"],
+    },
+    trueOrFalse:[
+      {q:"Spain have won the UEFA European Championship more times than any other nation.",a:true,fact:"Spain won it in 1964, 2008, 2012 and 2024 — four times, more than any other country."},
+      {q:"Italy beat England on penalties to win Euro 2020.",a:true,fact:"Italy won 3-2 on penalties after a 1-1 draw; Rashford, Sancho and Saka all missed."},
+      {q:"Andrea Pirlo won the World Cup with Italy.",a:true,fact:"Pirlo was outstanding in Italy's 2006 World Cup triumph in Germany."},
+      {q:"Juventus were relegated from Serie A following the 2006 Calciopoli scandal.",a:true,fact:"Juventus were stripped of 2 titles and relegated to Serie B — they bounced straight back up."},
+      {q:"Paolo Maldini played for both AC Milan and Inter Milan.",a:false,fact:"Maldini played his entire 25-year career at AC Milan — the definition of one-club loyalty."},
+      {q:"Sam Kerr is Australia's all-time leading international goalscorer.",a:true,fact:"Kerr's prolific career makes her the Matildas' greatest ever scorer — a genuine women's football icon."},
+      {q:"Gianluigi Buffon holds the record for most Italy caps.",a:true,fact:"Buffon earned 176 caps for Italy across an extraordinary international career spanning 20 years."},
+      {q:"Marta of Brazil is the Women's World Cup all-time leading scorer.",a:true,fact:"Marta has scored 17 Women's World Cup goals — more than any other player in history."},
+    ],
+  },
+  // ── DAY 6 ──────────────────────────────────────────────────────────────────
+  {
+    daily: { title:"Ballon d'Or Masters", subtitle:"Who has won the most?", gameId:"trueOrFalse" },
+    tenable: {
+      question:"Top 10 Ballon d'Or Winners (Most Awards)",
+      answers:[
+        {name:"Lionel Messi",rank:1},{name:"Cristiano Ronaldo",rank:2},{name:"Johan Cruyff",rank:3},
+        {name:"Michel Platini",rank:4},{name:"Marco van Basten",rank:5},{name:"Ronaldo Nazario",rank:6},
+        {name:"Ronaldinho",rank:7},{name:"Zinedine Zidane",rank:8},{name:"Karl-Heinz Rummenigge",rank:9},
+        {name:"Kevin De Bruyne",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from England's Euro 2020 (2021) squad",
+      answers:[
+        {name:"Harry Kane",popularity:94},{name:"Raheem Sterling",popularity:88},
+        {name:"Jordan Pickford",popularity:82},{name:"Bukayo Saka",popularity:80},
+        {name:"Luke Shaw",popularity:72},{name:"Kieran Trippier",popularity:68},
+        {name:"John Stones",popularity:70},{name:"Kyle Walker",popularity:65},
+        {name:"Declan Rice",popularity:75},{name:"Kalvin Phillips",popularity:60},
+        {name:"Mason Mount",popularity:65},{name:"Marcus Rashford",popularity:85},
+        {name:"Phil Foden",popularity:78},{name:"Jordan Henderson",popularity:62},
+        {name:"Jude Bellingham",popularity:74},{name:"Jack Grealish",popularity:72},
+        {name:"Tyrone Mings",popularity:35},{name:"Jadon Sancho",popularity:70},
+      ],
+    },
+    careerPath: {
+      clubs:["Sport Recife","Paris Saint-Germain","Barcelona","AC Milan","Flamengo","Atletico Mineiro","Fluminense"],
+      player:"Ronaldinho",
+      hints:["Brazilian World Cup winner in 2002","Won the Ballon d'Or in 2005","Known for his flair, dribbling and smile","Was once briefly detained in Paraguay"],
+    },
+    mystery: {
+      clues:["Born in Abidjan, Ivory Coast in 1981","Won the Premier League, FA Cup and Champions League with Chelsea","Also won the World Cup and African Cup of Nations","Was the captain of the Ivory Coast national team","Signed for LA Galaxy in 2012"],
+      player:"Didier Drogba",
+      options:["Didier Drogba","Samuel Eto'o","Michael Essien","Emmanuel Adebayor"],
+    },
+    trueOrFalse:[
+      {q:"Lionel Messi has won 8 Ballon d'Or awards.",a:true,fact:"Messi won his 8th Ballon d'Or in 2023, more than anyone in history."},
+      {q:"Michel Platini won three consecutive Ballon d'Ors in the 1980s.",a:true,fact:"Platini won in 1983, 1984 and 1985 — still unmatched for consecutive wins."},
+      {q:"England won Euro 2020.",a:false,fact:"Italy beat England on penalties in the final. Saka's penalty was saved."},
+      {q:"Didier Drogba scored in two Champions League finals.",a:true,fact:"He scored in the 2008 and 2012 finals, winning in 2012."},
+      {q:"Kevin De Bruyne won the Ballon d'Or in 2023.",a:false,fact:"Messi won the 2023 Ballon d'Or."},
+      {q:"Ronaldinho's Barcelona won the Champions League in 2006.",a:true,fact:"Barca beat Arsenal 2-1 in the final in Paris."},
+      {q:"Johan Cruyff won the Ballon d'Or four times.",a:false,fact:"Cruyff won it three times: 1971, 1973 and 1974."},
+      {q:"Marcus Rashford missed a penalty in the Euro 2020 final.",a:true,fact:"Rashford, Sancho and Saka all missed in the shootout against Italy."},
+    ],
+  },
+  // ── DAY 10 ─────────────────────────────────────────────────────────────────
+  // Theme: African Football Legends
+  {
+    daily: { title:"African Football Legends", subtitle:"Name the all-time greats from the continent!", gameId:"careerPath" },
+    tenable: {
+      question:"Top 10 African Players of the Year (all-time CAF award wins)",
+      answers:[
+        {name:"Samuel Eto'o",rank:1},{name:"Yaya Toure",rank:2},{name:"Mohamed Salah",rank:3},
+        {name:"Didier Drogba",rank:4},{name:"George Weah",rank:5},{name:"Abedi Pele",rank:6},
+        {name:"Nwankwo Kanu",rank:7},{name:"El Hadji Diouf",rank:8},{name:"Frederic Kanoute",rank:9},
+        {name:"Sadio Mane",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from Nigeria's 1996 Olympic gold-medal winning squad",
+      answers:[
+        {name:"Nwankwo Kanu",popularity:85},{name:"Jay-Jay Okocha",popularity:88},
+        {name:"Sunday Oliseh",popularity:70},{name:"Daniel Amokachi",popularity:72},
+        {name:"Taribo West",popularity:68},{name:"Celestine Babayaro",popularity:60},
+        {name:"Tijani Babangida",popularity:55},{name:"Emmanuel Amunike",popularity:65},
+        {name:"Austin Okocha",popularity:50},{name:"Garba Lawal",popularity:35},
+        {name:"Wilson Oruma",popularity:30},{name:"Uche Okechukwu",popularity:28},
+        {name:"Mobi Oparaku",popularity:22},{name:"Victor Ikpeba",popularity:58},
+        {name:"Dosu Joseph",popularity:20},{name:"Abiodun Obafemi",popularity:25},
+        {name:"Kingsley Obiekwu",popularity:18},{name:"Teslim Fatusi",popularity:15},
+      ],
+    },
+    careerPath: {
+      clubs:["Real Madrid","Mallorca","Barcelona","Inter Milan","Anzhi Makhachkala","Chelsea","Everton","Sampdoria","Antalyaspor","Konyaspor","Qatar SC"],
+      player:"Samuel Eto'o",
+      hints:["Cameroonian striker","Four-time African Footballer of the Year","Won the Champions League with Barcelona and Inter Milan","Part of the 2010 Inter treble under Mourinho"],
+    },
+    mystery: {
+      clues:["Born in Monrovia, Liberia in 1966","The only African player to win the Ballon d'Or","Played for Monaco, PSG and AC Milan","Won FIFA World Player of the Year in 1995","Later became President of his home country"],
+      player:"George Weah",
+      options:["George Weah","Abedi Pele","Rashidi Yekini","Nwankwo Kanu"],
+    },
+    trueOrFalse:[
+      {q:"George Weah is the only African player to win the Ballon d'Or.",a:true,fact:"Weah won the award in 1995 — still the only African recipient in history."},
+      {q:"Mohamed Salah has won the African Footballer of the Year award.",a:true,fact:"Salah won it in 2017 and 2018 during his rise at Liverpool."},
+      {q:"Cameroon reached the quarter-finals of the 1990 World Cup.",a:true,fact:"The Indomitable Lions, led by Roger Milla, were the first African side to reach the last 8."},
+      {q:"Didier Drogba scored a hat-trick in a Champions League final.",a:false,fact:"Drogba scored single goals in the 2008 and 2012 CL finals — no hat-trick."},
+      {q:"Yaya Toure was a Premier League winner with Manchester City.",a:true,fact:"Toure won the Premier League three times with City (2012, 2014, 2018)."},
+      {q:"Egypt have won the Africa Cup of Nations more than any other country.",a:true,fact:"Egypt have won 7 AFCON titles — the most of any African nation."},
+      {q:"Sadio Mane was born in Senegal.",a:true,fact:"Mane was born in Bambali, southern Senegal, in 1992."},
+      {q:"Abedi Pele is the father of AC Milan striker Andre Ayew.",a:true,fact:"Abedi's sons Andre, Jordan and Rahim have all played for Ghana's national team."},
+    ],
+  },
+  // ── DAY 11 ─────────────────────────────────────────────────────────────────
+  // Theme: Premier League Managers
+  {
+    daily: { title:"Premier League Managers", subtitle:"Name the most successful bosses in PL history!", gameId:"mystery" },
+    tenable: {
+      question:"Top 10 Premier League Managers by League Titles Won",
+      answers:[
+        {name:"Sir Alex Ferguson",rank:1},{name:"Pep Guardiola",rank:2},{name:"Jose Mourinho",rank:3},
+        {name:"Arsene Wenger",rank:4},{name:"Jurgen Klopp",rank:5},{name:"Carlo Ancelotti",rank:6},
+        {name:"Kenny Dalglish",rank:7},{name:"Manuel Pellegrini",rank:8},{name:"Roberto Mancini",rank:9},
+        {name:"Claudio Ranieri",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name managers who have won the Premier League (any club, any era)",
+      answers:[
+        {name:"Sir Alex Ferguson",popularity:96},{name:"Arsene Wenger",popularity:92},
+        {name:"Jose Mourinho",popularity:90},{name:"Pep Guardiola",popularity:95},
+        {name:"Jurgen Klopp",popularity:88},{name:"Carlo Ancelotti",popularity:80},
+        {name:"Kenny Dalglish",popularity:65},{name:"Claudio Ranieri",popularity:82},
+        {name:"Manuel Pellegrini",popularity:55},{name:"Roberto Mancini",popularity:68},
+        {name:"Antonio Conte",popularity:78},{name:"Mikel Arteta",popularity:35},
+        {name:"Howard Kendall",popularity:25},{name:"George Graham",popularity:45},
+        {name:"Brian Clough",popularity:60},{name:"Bob Paisley",popularity:55},
+        {name:"Joe Fagan",popularity:30},{name:"Herbert Chapman",popularity:40},
+      ],
+    },
+    careerPath: {
+      clubs:["Barcelona B","Barcelona","Bayern Munich","Manchester City"],
+      player:"Pep Guardiola",
+      hints:["Spanish manager and former Barcelona midfielder","Famous for tiki-taka possession football","Won 3 Champions Leagues as a manager","Delivered Manchester City's first ever treble in 2022/23"],
+    },
+    mystery: {
+      clues:["Born in Glasgow, Scotland in 1941","Won 13 Premier League titles as a manager","Also won the Champions League twice","Knighted in 1999","Retired from his most famous club in 2013"],
+      player:"Sir Alex Ferguson",
+      options:["Sir Alex Ferguson","Kenny Dalglish","Matt Busby","Bill Shankly"],
+    },
+    trueOrFalse:[
+      {q:"Sir Alex Ferguson won the Premier League in his first full season in charge at Manchester United.",a:false,fact:"Ferguson's first PL title came in 1992/93 — his 7th season at Old Trafford."},
+      {q:"Arsene Wenger went unbeaten for an entire Premier League season.",a:true,fact:"The Invincibles of 2003/04 went all 38 league games without defeat."},
+      {q:"Jose Mourinho has won the Premier League with three different clubs.",a:false,fact:"Mourinho won the PL with Chelsea only — though he lifted it three times there."},
+      {q:"Pep Guardiola won the Premier League in his first season at Manchester City.",a:false,fact:"Guardiola finished 3rd in 2016/17 — his first title at City came in 2017/18."},
+      {q:"Jurgen Klopp won the Premier League with Liverpool in 2019/20.",a:true,fact:"Liverpool's first top-flight title in 30 years — confirmed in June 2020."},
+      {q:"Claudio Ranieri was appointed by Leicester as favourites for relegation in 2015/16.",a:true,fact:"Bookmakers had Leicester at 5000-1 to win the title that season — Ranieri delivered."},
+      {q:"Carlo Ancelotti has won the Premier League with Chelsea.",a:true,fact:"Ancelotti won the 2009/10 league and FA Cup double with Chelsea."},
+      {q:"Kenny Dalglish has managed Liverpool and Blackburn Rovers to league titles.",a:true,fact:"Dalglish won titles with Liverpool (1986, 1988, 1990) and Blackburn (1995)."},
+    ],
+  },
+  // ── DAY 12 ─────────────────────────────────────────────────────────────────
+  // Theme: Copa America & South American Football
+  {
+    daily: { title:"Copa America Kings", subtitle:"South America's finest — do you know them?", gameId:"tenable" },
+    tenable: {
+      question:"Top 10 Nations by Copa America Titles Won",
+      answers:[
+        {name:"Uruguay",rank:1},{name:"Argentina",rank:2},{name:"Brazil",rank:3},
+        {name:"Paraguay",rank:4},{name:"Peru",rank:5},{name:"Chile",rank:6},
+        {name:"Bolivia",rank:7},{name:"Colombia",rank:8},{name:"Ecuador",rank:9},
+        {name:"Venezuela",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from Argentina's 2022 World Cup winning squad",
+      answers:[
+        {name:"Lionel Messi",popularity:98},{name:"Emiliano Martinez",popularity:86},
+        {name:"Angel Di Maria",popularity:88},{name:"Julian Alvarez",popularity:82},
+        {name:"Enzo Fernandez",popularity:78},{name:"Alexis Mac Allister",popularity:75},
+        {name:"Rodrigo De Paul",popularity:72},{name:"Leandro Paredes",popularity:60},
+        {name:"Nicolas Otamendi",popularity:70},{name:"Cristian Romero",popularity:74},
+        {name:"Nahuel Molina",popularity:55},{name:"Nicolas Tagliafico",popularity:58},
+        {name:"Marcos Acuna",popularity:50},{name:"Lautaro Martinez",popularity:80},
+        {name:"Lisandro Martinez",popularity:65},{name:"German Pezzella",popularity:35},
+        {name:"Franco Armani",popularity:28},{name:"Thiago Almada",popularity:32},
+      ],
+    },
+    careerPath: {
+      clubs:["Newell's Old Boys","Barcelona","Paris Saint-Germain","Inter Miami"],
+      player:"Lionel Messi",
+      hints:["Argentine forward","8-time Ballon d'Or winner","2022 World Cup winner","Left Barcelona in 2021 after 21 years"],
+    },
+    mystery: {
+      clues:["Born in Lanus, Argentina in 1988","Won the World Cup in 2022","Known for his clutch performances in big finals","Spent years at Real Madrid before moving to PSG","Scored in the 2022 World Cup final"],
+      player:"Angel Di Maria",
+      options:["Angel Di Maria","Sergio Aguero","Gonzalo Higuain","Paulo Dybala"],
+    },
+    trueOrFalse:[
+      {q:"Uruguay have won the Copa America more times than any other nation.",a:true,fact:"Uruguay have 15 Copa America titles — the most of any CONMEBOL country."},
+      {q:"Argentina ended a 28-year trophy drought by winning the 2021 Copa America.",a:true,fact:"Argentina beat Brazil 1-0 at the Maracana — Messi's first senior international trophy."},
+      {q:"Brazil's 1970 World Cup winning side is considered one of the greatest teams of all time.",a:true,fact:"Featuring Pele, Jairzinho and Carlos Alberto, Brazil won all 6 games in Mexico 1970."},
+      {q:"Uruguay hosted and won the first ever FIFA World Cup in 1930.",a:true,fact:"Uruguay beat Argentina 4-2 in the final in Montevideo."},
+      {q:"Diego Maradona scored the 'Hand of God' goal in the 1990 World Cup.",a:false,fact:"Maradona's famous handball came in the 1986 quarter-final against England."},
+      {q:"Chile won back-to-back Copa America titles in 2015 and 2016.",a:true,fact:"Chile beat Argentina on penalties in both finals, securing their first and second Copa titles."},
+      {q:"Colombia has won the FIFA World Cup once.",a:false,fact:"Colombia has never won the World Cup — their best finish is the quarter-finals in 2014."},
+      {q:"Marta won the FIFA Women's World Player of the Year a record six times.",a:true,fact:"The Brazilian great won the award every year from 2006 to 2010, and again in 2018."},
+    ],
+  },
+  // ── DAY 13 ─────────────────────────────────────────────────────────────────
+  // Theme: Women's World Cup & Women's Football
+  {
+    daily: { title:"Women's World Cup Icons", subtitle:"Name the all-time greats of the Women's game!", gameId:"tenable" },
+    tenable: {
+      question:"Top 10 Women's World Cup All-Time Goal Scorers",
+      answers:[
+        {name:"Marta",rank:1},{name:"Birgit Prinz",rank:2},{name:"Abby Wambach",rank:3},
+        {name:"Michelle Akers",rank:4},{name:"Bettina Wiegmann",rank:5},{name:"Sun Wen",rank:6},
+        {name:"Cristiane",rank:7},{name:"Carli Lloyd",rank:8},{name:"Heidi Mohr",rank:9},
+        {name:"Alex Morgan",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from Spain's 2023 Women's World Cup winning squad",
+      answers:[
+        {name:"Aitana Bonmati",popularity:92},{name:"Alexia Putellas",popularity:94},
+        {name:"Jenni Hermoso",popularity:90},{name:"Olga Carmona",popularity:75},
+        {name:"Salma Paralluelo",popularity:70},{name:"Mariona Caldentey",popularity:65},
+        {name:"Cata Coll",popularity:55},{name:"Irene Paredes",popularity:60},
+        {name:"Ona Batlle",popularity:50},{name:"Laia Codina",popularity:40},
+        {name:"Teresa Abelleira",popularity:35},{name:"Patri Guijarro",popularity:45},
+        {name:"Ivana Andres",popularity:30},{name:"Alba Redondo",popularity:32},
+        {name:"Esther Gonzalez",popularity:38},{name:"Eva Navarro",popularity:25},
+        {name:"Athenea del Castillo",popularity:28},{name:"Oihane Hernandez",popularity:22},
+      ],
+    },
+    careerPath: {
+      clubs:["Vasco da Gama","Umea IK","Los Angeles Sol","FC Gold Pride","Western New York Flash","Tyreso FF","FC Rosengard","Orlando Pride"],
+      player:"Marta",
+      hints:["Brazilian forward","Six-time FIFA World Player of the Year","All-time top scorer in Women's World Cup history","Retired from international football in 2024"],
+    },
+    mystery: {
+      clues:["Born in Mollet del Valles, Catalonia in 1994","Captain of Barcelona Femeni","Ballon d'Or Feminin winner in 2021 and 2022","Tore her ACL the day before Euro 2022 kicked off","Won the UEFA Women's Champions League with Barcelona in 2021 and 2023"],
+      player:"Alexia Putellas",
+      options:["Alexia Putellas","Aitana Bonmati","Jenni Hermoso","Irene Paredes"],
+    },
+    trueOrFalse:[
+      {q:"Spain won the 2023 Women's World Cup.",a:true,fact:"Spain beat England 1-0 in the Sydney final — Olga Carmona scored the only goal."},
+      {q:"Marta is the all-time top scorer in Women's World Cup history.",a:true,fact:"The Brazilian legend has scored 17 goals across five Women's World Cups."},
+      {q:"Aitana Bonmati won the 2023 Ballon d'Or Feminin.",a:true,fact:"The Barcelona midfielder won the award after Spain's World Cup triumph."},
+      {q:"The USA has won the Women's World Cup four times.",a:true,fact:"The Stars and Stripes won in 1991, 1999, 2015 and 2019."},
+      {q:"England's Lionesses won Euro 2022 at Wembley.",a:true,fact:"England beat Germany 2-1 after extra time, with Chloe Kelly scoring the winner."},
+      {q:"Sam Kerr is captain of Australia's Matildas.",a:true,fact:"The Chelsea striker has captained the Matildas since 2019."},
+      {q:"Japan won the 2011 Women's World Cup.",a:true,fact:"Japan beat the USA on penalties in Frankfurt — their only Women's World Cup title."},
+      {q:"Ada Hegerberg was the first winner of the Ballon d'Or Feminin.",a:true,fact:"The Norwegian striker won the inaugural Ballon d'Or Feminin in 2018."},
+    ],
+  },
+  // ── DAY 14 ─────────────────────────────────────────────────────────────────
+  // Theme: Asian Football
+  {
+    daily: { title:"Asian Football Heroes", subtitle:"Test your knowledge of the AFC's finest!", gameId:"careerPath" },
+    tenable: {
+      question:"Top 10 AFC Nations by Men's World Cup Appearances",
+      answers:[
+        {name:"South Korea",rank:1},{name:"Japan",rank:2},{name:"Iran",rank:3},
+        {name:"Saudi Arabia",rank:4},{name:"Australia",rank:5},{name:"North Korea",rank:6},
+        {name:"Qatar",rank:7},{name:"China",rank:8},{name:"Iraq",rank:9},
+        {name:"Kuwait",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from South Korea's 2002 World Cup semi-final squad",
+      answers:[
+        {name:"Park Ji-sung",popularity:92},{name:"Ahn Jung-hwan",popularity:78},
+        {name:"Hong Myung-bo",popularity:72},{name:"Lee Young-pyo",popularity:65},
+        {name:"Seol Ki-hyeon",popularity:55},{name:"Yoo Sang-chul",popularity:50},
+        {name:"Kim Nam-il",popularity:45},{name:"Lee Woon-jae",popularity:48},
+        {name:"Choi Jin-cheul",popularity:35},{name:"Lee Chun-soo",popularity:42},
+        {name:"Hwang Sun-hong",popularity:38},{name:"Song Chong-gug",popularity:25},
+        {name:"Cha Du-ri",popularity:40},{name:"Kim Tae-young",popularity:22},
+        {name:"Lee Min-sung",popularity:18},{name:"Yoon Jong-hwan",popularity:15},
+        {name:"Choi Tae-uk",popularity:20},{name:"Kim Byung-ji",popularity:28},
+      ],
+    },
+    careerPath: {
+      clubs:["Cerezo Osaka","Borussia Dortmund","Manchester United","Borussia Dortmund","Besiktas","Real Zaragoza","Sint-Truiden","Cerezo Osaka"],
+      player:"Shinji Kagawa",
+      hints:["Japanese attacking midfielder","Won back-to-back Bundesliga titles with Dortmund","Scored a Premier League hat-trick against Norwich","Briefly played for Manchester United under Sir Alex Ferguson"],
+    },
+    mystery: {
+      clues:["Born in Chuncheon, South Korea in 1992","Moved to Germany as a teenager to join Hamburger SV","Won the Premier League Golden Boot in 2021/22","Plays as captain for both his club and country","Has been named AFC Asian International Player of the Year multiple times"],
+      player:"Son Heung-min",
+      options:["Son Heung-min","Park Ji-sung","Shinji Kagawa","Hidetoshi Nakata"],
+    },
+    trueOrFalse:[
+      {q:"Japan won the Women's World Cup in 2011.",a:true,fact:"Japan beat the USA on penalties — their only Women's World Cup triumph."},
+      {q:"South Korea reached the World Cup semi-finals as co-hosts in 2002.",a:true,fact:"Guus Hiddink's side beat Italy and Spain en route to the last four — the best ever AFC result."},
+      {q:"Ali Daei of Iran held the men's international goal-scoring record until Cristiano Ronaldo broke it.",a:true,fact:"Daei's 109 international goals stood as the record for over 15 years until Ronaldo surpassed him in 2021."},
+      {q:"Qatar hosted the 2022 FIFA World Cup — their first ever World Cup appearance.",a:true,fact:"Qatar qualified automatically as hosts and exited in the group stage."},
+      {q:"Son Heung-min has won the Champions League with Tottenham.",a:false,fact:"Spurs lost the 2019 Champions League final to Liverpool 2-0."},
+      {q:"Park Ji-sung won the Premier League four times with Manchester United.",a:true,fact:"Park won PL titles in 2006/07, 2007/08, 2008/09 and 2010/11."},
+      {q:"Hidetoshi Nakata won Serie A with Roma in 2001.",a:true,fact:"Nakata played a key role in Roma's only Serie A title of the modern era."},
+      {q:"North Korea beat Italy 1-0 at the 1966 World Cup.",a:true,fact:"One of the biggest shocks in World Cup history — Pak Doo-ik scored the winner at Ayresome Park."},
+    ],
+  },
+  // ── DAY 15 ─────────────────────────────────────────────────────────────────
+  // Theme: MLS & North American Soccer
+  {
+    daily: { title:"Stars & Stripes", subtitle:"How well do you know Major League Soccer?", gameId:"pointless" },
+    tenable: {
+      question:"Top 10 MLS All-Time Goal Scorers (regular season)",
+      answers:[
+        {name:"Chris Wondolowski",rank:1},{name:"Landon Donovan",rank:2},{name:"Kei Kamara",rank:3},
+        {name:"Jeff Cunningham",rank:4},{name:"Jaime Moreno",rank:5},{name:"Bradley Wright-Phillips",rank:6},
+        {name:"Ante Razov",rank:7},{name:"Jason Kreis",rank:8},{name:"Taylor Twellman",rank:9},
+        {name:"Carlos Ruiz",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from Inter Miami's 2024 squad (Messi era)",
+      answers:[
+        {name:"Lionel Messi",popularity:99},{name:"Luis Suarez",popularity:92},
+        {name:"Sergio Busquets",popularity:85},{name:"Jordi Alba",popularity:82},
+        {name:"DeAndre Yedlin",popularity:60},{name:"Drake Callender",popularity:48},
+        {name:"Leonardo Campana",popularity:42},{name:"Robert Taylor",popularity:38},
+        {name:"Diego Gomez",popularity:35},{name:"Federico Redondo",popularity:30},
+        {name:"Matias Rojas",popularity:28},{name:"Facundo Farias",popularity:25},
+        {name:"Julian Gressel",popularity:32},{name:"Noah Allen",popularity:20},
+        {name:"Tomas Aviles",popularity:26},{name:"Serhiy Kryvtsov",popularity:22},
+        {name:"Benjamin Cremaschi",popularity:34},{name:"David Ruiz",popularity:18},
+      ],
+    },
+    careerPath: {
+      clubs:["MetroStars","Manchester United","Everton","Colorado Rapids","Memphis 901"],
+      player:"Tim Howard",
+      hints:["American goalkeeper","Made a record 15 saves in a single World Cup match","Spent a decade at Everton","Won the FA Cup with Manchester United in 2004"],
+    },
+    mystery: {
+      clues:["Born in Ontario, California in 1982","Shares the USMNT all-time top scorer record with Clint Dempsey (57 goals)","Spent most of his career at LA Galaxy","Scored a dramatic stoppage-time goal against Algeria at the 2010 World Cup","Had loan spells at Bayer Leverkusen and Bayern Munich in Germany"],
+      player:"Landon Donovan",
+      options:["Landon Donovan","Clint Dempsey","Tim Howard","Brian McBride"],
+    },
+    trueOrFalse:[
+      {q:"Chris Wondolowski is MLS's all-time top regular-season goal scorer.",a:true,fact:"Wondolowski scored 171 MLS regular-season goals across his career with Houston and San Jose."},
+      {q:"Lionel Messi joined Inter Miami in 2023.",a:true,fact:"Messi signed for Inter Miami in July 2023 after leaving Paris Saint-Germain."},
+      {q:"The MLS Cup is awarded to the winner of the regular-season standings.",a:false,fact:"The Supporters' Shield is for the regular season — the MLS Cup is the post-season playoff final."},
+      {q:"The USA men's team has never reached a FIFA World Cup final.",a:true,fact:"Their best result is third place at the inaugural 1930 World Cup in Uruguay."},
+      {q:"Pele played for the New York Cosmos in the old NASL.",a:true,fact:"Pele joined the Cosmos in 1975 and helped popularise soccer in the USA."},
+      {q:"David Beckham played for LA Galaxy before joining Paris Saint-Germain.",a:true,fact:"Beckham played for LA Galaxy from 2007 to 2012 before a short PSG spell to end his career."},
+      {q:"Thierry Henry never played in Major League Soccer.",a:false,fact:"Henry played for the New York Red Bulls from 2010 to 2014, scoring 52 goals in all competitions."},
+      {q:"The Seattle Sounders were the first MLS club to win the CONCACAF Champions League.",a:true,fact:"Seattle broke a 22-year MLS drought by winning the competition in 2022."},
+    ],
+  },
+  // ── DAY 16 ─────────────────────────────────────────────────────────────────
+  // Theme: Italian Football & Serie A Dynasties
+  {
+    daily: { title:"Azzurri Nights", subtitle:"How well do you know Italian football?", gameId:"tenable" },
+    tenable: {
+      question:"Top 10 Serie A All-Time Top Scorers",
+      answers:[
+        {name:"Silvio Piola",rank:1},{name:"Francesco Totti",rank:2},{name:"Gunnar Nordahl",rank:3},
+        {name:"Giuseppe Meazza",rank:4},{name:"Jose Altafini",rank:5},{name:"Roberto Baggio",rank:6},
+        {name:"Kurt Hamrin",rank:7},{name:"Giuseppe Signori",rank:8},{name:"Alessandro Del Piero",rank:9},
+        {name:"Gabriel Batistuta",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from AC Milan's 1988-90 back-to-back European Cup-winning squad",
+      answers:[
+        {name:"Paolo Maldini",popularity:95},{name:"Franco Baresi",popularity:90},
+        {name:"Marco van Basten",popularity:93},{name:"Ruud Gullit",popularity:90},
+        {name:"Frank Rijkaard",popularity:85},{name:"Carlo Ancelotti",popularity:82},
+        {name:"Roberto Donadoni",popularity:55},{name:"Alessandro Costacurta",popularity:48},
+        {name:"Mauro Tassotti",popularity:40},{name:"Daniele Massaro",popularity:35},
+        {name:"Giovanni Galli",popularity:28},{name:"Filippo Galli",popularity:22},
+        {name:"Pietro Paolo Virdis",popularity:25},{name:"Angelo Colombo",popularity:20},
+        {name:"Alberigo Evani",popularity:24},{name:"Andrea Pazzagli",popularity:15},
+        {name:"Graziano Mannari",popularity:15},{name:"Christian Lantignotti",popularity:14},
+      ],
+    },
+    careerPath: {
+      clubs:["Brescia","Inter Milan","Reggina","Brescia","AC Milan","Juventus","New York City FC"],
+      player:"Andrea Pirlo",
+      hints:["Italian midfielder known as 'The Maestro'","Won the 2006 World Cup with Italy","Two Champions League titles with AC Milan","Joined Juventus on a free transfer in 2011"],
+    },
+    mystery: {
+      clues:["Born in Caldogno, Italy in 1967","Nicknamed 'Il Divin Codino' (The Divine Ponytail)","Won the 1993 Ballon d'Or","Missed a decisive penalty in the 1994 World Cup Final shootout against Brazil","Played for Vicenza, Fiorentina, Juventus, Milan, Bologna, Inter and Brescia"],
+      player:"Roberto Baggio",
+      options:["Roberto Baggio","Alessandro Del Piero","Francesco Totti","Paolo Rossi"],
+    },
+    trueOrFalse:[
+      {q:"Italy has won the FIFA World Cup four times.",a:true,fact:"Italy lifted the trophy in 1934, 1938, 1982 and 2006."},
+      {q:"Juventus won the UEFA Champions League in 1996.",a:true,fact:"Juventus beat Ajax on penalties in the 1996 final in Rome."},
+      {q:"AC Milan has won more European Cup/Champions League titles than any other Italian club.",a:true,fact:"Milan have seven European Cups, more than any other Italian side and second only to Real Madrid overall."},
+      {q:"Paolo Maldini spent his entire professional club career at AC Milan.",a:true,fact:"Maldini played 25 seasons for Milan (1984-2009), never representing another club."},
+      {q:"Inter Milan's 2010 treble was managed by Carlo Ancelotti.",a:false,fact:"Jose Mourinho led Inter to the 2009-10 treble of Serie A, Coppa Italia and Champions League."},
+      {q:"Francesco Totti spent his entire playing career at Roma.",a:true,fact:"Totti is one of the greatest one-club players ever, playing for Roma from 1992 to 2017."},
+      {q:"Italy failed to qualify for the 2018 FIFA World Cup.",a:true,fact:"Italy were eliminated by Sweden in a playoff, missing the World Cup for the first time since 1958."},
+      {q:"Fabio Cannavaro won the 2006 Ballon d'Or.",a:true,fact:"Cannavaro captained Italy to World Cup glory in 2006 and became the only Italian defender to win the Ballon d'Or."},
+    ],
+  },
+  // ── DAY 17 ─────────────────────────────────────────────────────────────────
+  // Theme: German Football & Bundesliga Legends
+  {
+    daily: { title:"Die Mannschaft", subtitle:"How well do you know German football?", gameId:"pointless" },
+    tenable: {
+      question:"Top 10 Bundesliga All-Time Top Scorers",
+      answers:[
+        {name:"Gerd Muller",rank:1},{name:"Robert Lewandowski",rank:2},{name:"Klaus Fischer",rank:3},
+        {name:"Jupp Heynckes",rank:4},{name:"Manfred Burgsmuller",rank:5},{name:"Claudio Pizarro",rank:6},
+        {name:"Ulf Kirsten",rank:7},{name:"Stefan Kuntz",rank:8},{name:"Dieter Muller",rank:9},
+        {name:"Mario Gomez",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from Germany's 2014 World Cup-winning squad",
+      answers:[
+        {name:"Manuel Neuer",popularity:93},{name:"Thomas Muller",popularity:92},
+        {name:"Mesut Ozil",popularity:90},{name:"Toni Kroos",popularity:90},
+        {name:"Philipp Lahm",popularity:90},{name:"Bastian Schweinsteiger",popularity:88},
+        {name:"Mario Gotze",popularity:88},{name:"Miroslav Klose",popularity:85},
+        {name:"Mats Hummels",popularity:80},{name:"Jerome Boateng",popularity:75},
+        {name:"Lukas Podolski",popularity:78},{name:"Sami Khedira",popularity:70},
+        {name:"Andre Schurrle",popularity:58},{name:"Per Mertesacker",popularity:35},
+        {name:"Benedikt Howedes",popularity:25},{name:"Christoph Kramer",popularity:28},
+        {name:"Roman Weidenfeller",popularity:22},{name:"Kevin Grosskreutz",popularity:24},
+      ],
+    },
+    careerPath: {
+      clubs:["Homburg","Kaiserslautern","Werder Bremen","Bayern Munich","Lazio"],
+      player:"Miroslav Klose",
+      hints:["German striker born in Poland","Holds the all-time FIFA World Cup goal record","Won the 2014 World Cup with Germany","Ended his career in Italy's Serie A"],
+    },
+    mystery: {
+      clues:["Born in Munich in 1945","Nicknamed 'Der Kaiser'","Won two Ballon d'Ors (1972, 1976)","Captained West Germany to the 1974 World Cup, then managed them to the 1990 title","Pioneered the modern sweeper (libero) role at Bayern Munich"],
+      player:"Franz Beckenbauer",
+      options:["Franz Beckenbauer","Lothar Matthaus","Paul Breitner","Fritz Walter"],
+    },
+    trueOrFalse:[
+      {q:"Germany has won the FIFA World Cup four times.",a:true,fact:"West Germany/Germany won in 1954, 1974, 1990 and 2014."},
+      {q:"Bayern Munich have won the UEFA Champions League (or European Cup) six times.",a:true,fact:"Bayern's titles came in 1974, 1975, 1976, 2001, 2013 and 2020."},
+      {q:"Borussia Dortmund won the UEFA Champions League in 1997.",a:true,fact:"Dortmund beat Juventus 3-1 in the 1997 final in Munich."},
+      {q:"Germany beat Brazil 7-1 in the 2014 FIFA World Cup semi-final.",a:true,fact:"Played in Belo Horizonte, Germany led 5-0 inside 29 minutes en route to the 7-1 win."},
+      {q:"Miroslav Klose is the all-time top scorer in FIFA World Cup history.",a:true,fact:"Klose scored 16 World Cup goals across four tournaments (2002-2014), overtaking Ronaldo Nazario's 15."},
+      {q:"Bayern Munich won eleven consecutive Bundesliga titles.",a:true,fact:"Bayern lifted the Meisterschale every season from 2012-13 to 2022-23 before Leverkusen broke the streak."},
+      {q:"Germany won UEFA Euro 1996.",a:true,fact:"Germany beat the Czech Republic 2-1 at Wembley thanks to Oliver Bierhoff's golden goal."},
+      {q:"Robert Lewandowski won the Ballon d'Or in 2020.",a:false,fact:"The 2020 Ballon d'Or was cancelled due to the COVID-19 pandemic. Lewandowski finished second in 2021 behind Messi."},
+    ],
+  },
+  // ── DAY 18 ─────────────────────────────────────────────────────────────────
+  // Theme: Dutch Total Football
+  {
+    daily: { title:"Total Football", subtitle:"Orange is the colour — how well do you know the Dutch?", gameId:"mystery" },
+    tenable: {
+      question:"Top 10 Netherlands All-Time International Goal Scorers",
+      answers:[
+        {name:"Memphis Depay",rank:1},{name:"Robin van Persie",rank:2},{name:"Klaas-Jan Huntelaar",rank:3},
+        {name:"Patrick Kluivert",rank:4},{name:"Dennis Bergkamp",rank:5},{name:"Faas Wilkes",rank:6},
+        {name:"Ruud van Nistelrooy",rank:7},{name:"Abe Lenstra",rank:8},{name:"Johan Cruyff",rank:9},
+        {name:"Beb Bakhuys",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from Ajax's 1995 Champions League-winning squad",
+      answers:[
+        {name:"Edwin van der Sar",popularity:82},{name:"Patrick Kluivert",popularity:92},
+        {name:"Frank Rijkaard",popularity:88},{name:"Clarence Seedorf",popularity:88},
+        {name:"Edgar Davids",popularity:85},{name:"Marc Overmars",popularity:85},
+        {name:"Jari Litmanen",popularity:72},{name:"Frank de Boer",popularity:78},
+        {name:"Ronald de Boer",popularity:60},{name:"Danny Blind",popularity:48},
+        {name:"Finidi George",popularity:40},{name:"Michael Reiziger",popularity:50},
+        {name:"Winston Bogarde",popularity:35},{name:"Nwankwo Kanu",popularity:72},
+        {name:"Peter van Vossen",popularity:22},{name:"Frank Verlaat",popularity:18},
+        {name:"John Veldman",popularity:15},{name:"Fred Grim",popularity:15},
+      ],
+    },
+    careerPath: {
+      clubs:["Den Bosch","Heerenveen","PSV Eindhoven","Manchester United","Real Madrid","Hamburger SV","Malaga"],
+      player:"Ruud van Nistelrooy",
+      hints:["Dutch striker known for clinical finishing","PSV's record goalscorer before he left the Netherlands","Won the La Liga title with Real Madrid","Ended his career at Malaga in Spain"],
+    },
+    mystery: {
+      clues:["Born in Amsterdam in 1947","Three-time Ballon d'Or winner (1971, 1973, 1974)","Won three consecutive European Cups with Ajax","Captained Netherlands to the 1974 World Cup Final","As manager, built Barcelona's 'Dream Team' that won the 1992 European Cup"],
+      player:"Johan Cruyff",
+      options:["Johan Cruyff","Ruud Gullit","Marco van Basten","Dennis Bergkamp"],
+    },
+    trueOrFalse:[
+      {q:"The Netherlands has won the FIFA World Cup.",a:false,fact:"The Dutch have finished runners-up three times (1974, 1978, 2010) but have never lifted the trophy."},
+      {q:"Johan Cruyff won three consecutive European Cups with Ajax.",a:true,fact:"Ajax won in 1971, 1972 and 1973 — with Cruyff the talisman of Rinus Michels' 'Total Football'."},
+      {q:"The Netherlands won UEFA Euro 1988.",a:true,fact:"Van Basten's stunning volley against the Soviet Union in the final in Munich sealed the Dutch title."},
+      {q:"Ajax won the UEFA Champions League in 1995.",a:true,fact:"Louis van Gaal's Ajax beat AC Milan 1-0 in Vienna; Patrick Kluivert scored the winning goal aged 18."},
+      {q:"Dennis Bergkamp famously refused to fly for most of his career.",a:true,fact:"Nicknamed the 'Non-Flying Dutchman', Bergkamp travelled by train or car after a mid-air scare in 1994."},
+      {q:"Virgil van Dijk has won the Ballon d'Or.",a:false,fact:"Van Dijk finished second to Lionel Messi in the 2019 vote — the closest any defender has come since Cannavaro in 2006."},
+      {q:"Ruud Gullit captained the Netherlands to their Euro 1988 triumph.",a:true,fact:"Gullit, the reigning Ballon d'Or holder, wore the armband and scored in the 2-0 final win over the USSR."},
+      {q:"Johan Cruyff wore the number 14 shirt at Ajax.",a:true,fact:"Cruyff's 14 became so iconic that Ajax retired the number from its senior squad in 2007."},
+    ],
+  },
+  // ── DAY 19 ─────────────────────────────────────────────────────────────────
+  // Theme: Portuguese Football — Selecção das Quinas
+  {
+    daily: { title:"Portuguese Greats", subtitle:"From Eusébio to Ronaldo — test your knowledge!", gameId:"careerPath" },
+    tenable: {
+      question:"Top 10 Portugal All-Time International Goal Scorers",
+      answers:[
+        {name:"Cristiano Ronaldo",rank:1},{name:"Pauleta",rank:2},{name:"Eusebio",rank:3},
+        {name:"Luis Figo",rank:4},{name:"Nuno Gomes",rank:5},{name:"Rui Costa",rank:6},
+        {name:"Joao Felix",rank:7},{name:"Helder Postiga",rank:8},{name:"Simao Sabrosa",rank:9},
+        {name:"Fernando Peyroteo",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from Portugal's Euro 2016 winning squad",
+      answers:[
+        {name:"Cristiano Ronaldo",popularity:98},{name:"Pepe",popularity:82},
+        {name:"Ricardo Quaresma",popularity:80},{name:"Joao Moutinho",popularity:75},
+        {name:"Renato Sanches",popularity:72},{name:"Nani",popularity:70},
+        {name:"Bruno Alves",popularity:55},{name:"Raphael Guerreiro",popularity:60},
+        {name:"Jose Fonte",popularity:58},{name:"Cedric Soares",popularity:52},
+        {name:"Danilo Pereira",popularity:48},{name:"Eder",popularity:65},
+        {name:"Adrien Silva",popularity:42},{name:"Joao Mario",popularity:50},
+        {name:"William Carvalho",popularity:45},{name:"Rui Patricio",popularity:68},
+        {name:"Anthony Lopes",popularity:35},{name:"Eliseu",popularity:38},
+      ],
+    },
+    careerPath: {
+      clubs:["Sporting CP","Barcelona","Real Madrid","Inter Milan","Barcelona"],
+      player:"Luis Figo",
+      hints:["Portuguese captain for over a decade","Won the Ballon d'Or in 2000","His transfer from Barcelona to Real Madrid caused a huge scandal","Pelted with a pig's head by Barça fans on his return to the Nou Camp"],
+    },
+    mystery: {
+      clues:["Born in Mozambique in 1942","Known as 'The Black Panther'","Top scorer at the 1966 World Cup with 9 goals","Won the European Cup with Benfica in 1961 and 1962","Won the Ballon d'Or in 1965"],
+      player:"Eusebio",
+      options:["Eusebio","Coluna","Jose Augusto","Torres"],
+    },
+    trueOrFalse:[
+      {q:"Portugal won their first major international trophy at Euro 2016.",a:true,fact:"Eder's extra-time goal beat France 1-0 in the final — Portugal's first-ever major tournament win."},
+      {q:"Cristiano Ronaldo has scored over 900 career goals.",a:true,fact:"Ronaldo surpassed 900 career goals in 2024, making him the highest-scoring player in football history."},
+      {q:"Luis Figo won the Ballon d'Or in 2000.",a:true,fact:"Figo beat Zidane and Raul to win the award the same year he controversially moved to Real Madrid."},
+      {q:"Eusebio scored 9 goals at the 1966 World Cup, including 4 in one game against North Korea.",a:true,fact:"Portugal came back from 3-0 down against North Korea — Eusebio scored 4 times in the second half."},
+      {q:"Benfica have won the Champions League / European Cup more than any Portuguese club.",a:true,fact:"Benfica won the European Cup in 1961 and 1962 — the only Portuguese club ever to win it."},
+      {q:"Renato Sanches won the Golden Boy award in 2016.",a:true,fact:"Sanches won the award the same year he helped Portugal win Euro 2016 — a sensational breakthrough year."},
+      {q:"Portugal failed to qualify for the 1998 World Cup.",a:false,fact:"Portugal reached the semi-finals of the 1966 World Cup and qualified for every World Cup from 1986 onwards."},
+      {q:"Joao Felix became the most expensive Portuguese player ever when he joined Atletico Madrid.",a:true,fact:"Felix moved from Benfica for €126 million in 2019, smashing the Portuguese transfer record."},
+    ],
+  },
+  // ── DAY 20 ─────────────────────────────────────────────────────────────────
+  // Theme: Eastern European Powerhouses — Hungary 1954, Bulgaria 1994, Yugoslavia's Plavi
+  {
+    daily: { title:"Eastern European Legends", subtitle:"The great teams the world almost forgot!", gameId:"tenable" },
+    tenable: {
+      question:"Top 10 Hungary All-Time International Goal Scorers",
+      answers:[
+        {name:"Ferenc Puskas",rank:1},{name:"Sandor Kocsis",rank:2},{name:"Imre Schlosser",rank:3},
+        {name:"Lajos Tichy",rank:4},{name:"Gyula Zsengeller",rank:5},{name:"Nandor Hidegkuti",rank:6},
+        {name:"Florian Albert",rank:7},{name:"Gyorgy Sarosi",rank:8},{name:"Zoltan Czibor",rank:9},
+        {name:"Jozsef Takacs",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from the famous Hungary 'Mighty Magyars' squad of the early 1950s",
+      answers:[
+        {name:"Ferenc Puskas",popularity:95},{name:"Sandor Kocsis",popularity:85},
+        {name:"Nandor Hidegkuti",popularity:72},{name:"Zoltan Czibor",popularity:65},
+        {name:"Jozsef Bozsik",popularity:60},{name:"Gyula Lorant",popularity:45},
+        {name:"Jeno Buzanszky",popularity:30},{name:"Mihaly Lantos",popularity:28},
+        {name:"Gyula Grocsis",popularity:35},{name:"Laszlo Budai",popularity:32},
+        {name:"Jozsef Zakarias",popularity:22},{name:"Karoly Soos",popularity:18},
+        {name:"Bela Kovacs",popularity:15},{name:"Lajos Csordas",popularity:14},
+        {name:"Peter Palotai",popularity:12},{name:"Imre Kovacs",popularity:20},
+        {name:"Andras Karpati",popularity:16},{name:"Janos Delhazi",popularity:10},
+      ],
+    },
+    careerPath: {
+      clubs:["Kispest Honved","Real Madrid","Espanyol"],
+      player:"Ferenc Puskas",
+      hints:["Known as 'The Galloping Major'","Scored 84 goals in 85 international appearances for Hungary","Later became a naturalised Spanish citizen and played for Spain","Scored 4 goals in the 1960 European Cup final"],
+    },
+    mystery: {
+      clues:["Born in Plovdiv, Bulgaria in 1966","Won the Ballon d'Or in 1994","Led Bulgaria to the World Cup semi-finals in the USA 1994","Scored a stunning free kick against Germany in the quarter-finals","Played for CSKA Sofia, Barcelona and Parma among others"],
+      player:"Hristo Stoichkov",
+      options:["Hristo Stoichkov","Emil Kostadinov","Krasimir Balakov","Yordan Letchkov"],
+    },
+    trueOrFalse:[
+      {q:"Hungary's 'Mighty Magyars' went 32 games unbeaten between 1950 and 1954.",a:true,fact:"Hungary's extraordinary run of 32 consecutive unbeaten internationals came to a dramatic end — in the World Cup final itself, when they lost to West Germany."},
+      {q:"Ferenc Puskas scored 4 goals in a single European Cup final.",a:true,fact:"Puskas scored 4 in Real Madrid's 7-3 demolition of Eintracht Frankfurt in the 1960 European Cup final at Hampden Park — still considered the greatest club game ever played."},
+      {q:"Bulgaria reached the semi-finals of the 1994 World Cup.",a:true,fact:"After stunning Germany 2-1 in the quarter-final, Bulgaria lost to Italy in the semi-final in their greatest ever World Cup run."},
+      {q:"Yugoslavia won the UEFA European Championship.",a:false,fact:"Yugoslavia never won the European Championship, though they were runners-up in 1960 and 1968. The successor state Serbia has not won it either."},
+      {q:"Hristo Stoichkov won the Ballon d'Or in 1994.",a:true,fact:"Stoichkov shared the Ballon d'Or with Roberto Baggio — the first (and so far only) time two players shared the award."},
+      {q:"The Mighty Magyars beat England 6-3 at Wembley in 1953.",a:true,fact:"England had never lost at Wembley to a team from outside the British Isles — Hungary's win was one of football's great seismic shocks."},
+      {q:"Drazan Jerkovic was Yugoslavia's top scorer at the 1962 World Cup.",a:true,fact:"Jerkovic scored 5 goals for Yugoslavia as they reached the semi-finals in Chile, finishing joint-top scorer of the tournament."},
+      {q:"Robert Prosinecki played for both Real Madrid and Barcelona.",a:true,fact:"The brilliant Croatian played for Real Madrid, Oviedo, Barcelona and Sevilla during his time in Spain — one of the few players to represent both Madrid clubs."},
+    ],
+  },
+  // ── DAY 21 ─────────────────────────────────────────────────────────────────
+  // Theme: Nordic & Scandinavian Football — Denmark 1992, Sweden 1994
+  {
+    daily: { title:"Nordic Heroes", subtitle:"Scandinavia's finest hour — do you know them?", gameId:"pointless" },
+    tenable: {
+      question:"Top 10 Sweden All-Time International Goal Scorers",
+      answers:[
+        {name:"Zlatan Ibrahimovic",rank:1},{name:"Sven Rydell",rank:2},{name:"Gunnar Nordahl",rank:3},
+        {name:"Henrik Larsson",rank:4},{name:"Gunnar Gren",rank:5},{name:"Marcus Berg",rank:6},
+        {name:"Bertil Nordahl",rank:7},{name:"Carl-Erik Palmgren",rank:8},{name:"Per Kaufeldt",rank:9},
+        {name:"Nils Liedholm",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from Denmark's shock Euro 1992 winning squad",
+      answers:[
+        {name:"Peter Schmeichel",popularity:92},{name:"Brian Laudrup",popularity:90},
+        {name:"Michael Laudrup",popularity:88},{name:"Kim Vilfort",popularity:72},
+        {name:"John Jensen",popularity:70},{name:"Lars Elstrup",popularity:60},
+        {name:"Henrik Andersen",popularity:45},{name:"John Sivebæk",popularity:40},
+        {name:"Kim Christofte",popularity:35},{name:"Flemming Povlsen",popularity:52},
+        {name:"Kent Nielsen",popularity:48},{name:"Lars Olsen",popularity:50},
+        {name:"Torben Piechnik",popularity:30},{name:"Claus Christiansen",popularity:28},
+        {name:"Bent Christensen",popularity:22},{name:"Per Frimann",popularity:20},
+        {name:"Claus Larsen",popularity:18},{name:"Bjarne Goldbaek",popularity:25},
+      ],
+    },
+    careerPath: {
+      clubs:["Gothenburg","Feyenoord","AC Milan","Sampdoria","Barcelona","Chelsea","Celta Vigo","Aston Villa"],
+      player:"Henrik Larsson",
+      hints:["Swedish striker known as 'The King of Kings' at Celtic","Won the Champions League with Barcelona in 2006","Scored in the 2006 Champions League final as a substitute","Came out of retirement to help Sweden in the 2006 World Cup qualifier"],
+    },
+    mystery: {
+      clues:["Born in Frederiksberg, Denmark in 1963","Won the European Cup with Brøndby and later Manchester United","Considered one of the greatest goalkeepers of all time","Won the Premier League title five times","His son Kasper also became a professional goalkeeper and won the Premier League with Leicester"],
+      player:"Peter Schmeichel",
+      options:["Peter Schmeichel","Thomas Sorensen","Kasper Schmeichel","Jan Tomaszewski"],
+    },
+    trueOrFalse:[
+      {q:"Denmark were not originally qualified for Euro 1992 but were invited after Yugoslavia were withdrawn.",a:true,fact:"Yugoslavia were expelled due to the civil war and UN sanctions; Denmark, as runners-up in their qualifying group, replaced them with just 10 days to prepare — and won the whole tournament."},
+      {q:"Henrik Larsson scored in a Champions League final.",a:false,fact:"Larsson came off the bench in the 2006 CL final against Arsenal and set up both Barcelona goals — but he didn't score. He is forever remembered for those two crucial assists in the second half."},
+      {q:"Sweden finished third at the 1994 World Cup.",a:true,fact:"Tomas Brolin, Martin Dahlin and Kennet Andersson starred as Sweden beat Bulgaria 4-0 in the third-place play-off — their best World Cup finish since 1958."},
+      {q:"Peter Schmeichel scored a Premier League goal.",a:true,fact:"Schmeichel scored a famous header for Aston Villa against Everton in 2001 — one of very few times a goalkeeper has scored in the Premier League."},
+      {q:"Michael Laudrup played for both Barcelona and Real Madrid.",a:true,fact:"Laudrup won four La Liga titles with Barcelona before controversially moving to Real Madrid in 1994 — he won another title there in his debut season."},
+      {q:"Norway beat Brazil at the 1998 World Cup.",a:true,fact:"Kjetil Rekdal scored a 89th-minute penalty as Norway stunned Brazil 2-1 in the group stage — one of the biggest World Cup upsets of the 1990s."},
+      {q:"Zlatan Ibrahimovic came out of international retirement to help Sweden qualify for the 2022 World Cup.",a:false,fact:"Zlatan returned from international retirement in March 2021 to help Sweden qualify for the 2022 World Cup but Sweden ultimately failed to qualify, losing to Poland in the play-offs."},
+      {q:"The Faroe Islands beat Austria in their first ever competitive international, a Euro 1992 qualifier.",a:true,fact:"The Faroe Islands — playing their very first competitive international — beat Austria 1-0 in September 1990 during Euro 1992 qualifying. Goalkeeper Jens Martin Knudsen, in his trademark woolly hat, kept a clean sheet in one of the biggest upsets in qualifying history."},
+    ],
+  },
+  // ── DAY 22 ─────────────────────────────────────────────────────────────────
+  // Theme: Latin American Football — Argentina greats & the Maradona/Messi era
+  {
+    daily: { title:"Albiceleste Legends", subtitle:"From Maradona to Messi — how well do you know Argentina?", gameId:"tenable" },
+    tenable: {
+      question:"Top 10 Argentina All-Time International Goal Scorers",
+      answers:[
+        {name:"Lionel Messi",rank:1},{name:"Gabriel Batistuta",rank:2},{name:"Sergio Aguero",rank:3},
+        {name:"Hernan Crespo",rank:4},{name:"Diego Maradona",rank:5},{name:"Lautaro Martinez",rank:6},
+        {name:"Gonzalo Higuain",rank:7},{name:"Luis Artime",rank:8},{name:"Leopoldo Luque",rank:9},
+        {name:"Daniel Passarella",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from Argentina's 1986 World Cup winning squad",
+      answers:[
+        {name:"Diego Maradona",popularity:98},{name:"Jorge Burruchaga",popularity:60},
+        {name:"Jorge Valdano",popularity:55},{name:"Nery Pumpido",popularity:45},
+        {name:"Oscar Ruggeri",popularity:50},{name:"Sergio Batista",popularity:35},
+        {name:"Ricardo Giusti",popularity:30},{name:"Jose Luis Brown",popularity:42},
+        {name:"Hector Enrique",popularity:38},{name:"Julio Olarticoechea",popularity:22},
+        {name:"Pedro Pasculli",popularity:25},{name:"Oscar Garre",popularity:18},
+        {name:"Sergio Almiron",popularity:18},{name:"Carlos Tapia",popularity:15},
+        {name:"Marcelo Trobbiani",popularity:15},{name:"Daniel Passarella",popularity:55},
+        {name:"Jose Cuciuffo",popularity:18},{name:"Claudio Borghi",popularity:25},
+      ],
+    },
+    careerPath: {
+      clubs:["Boca Juniors","Corinthians","West Ham","Manchester United","Manchester City","Juventus","Boca Juniors","Shanghai Shenhua"],
+      player:"Carlos Tevez",
+      hints:["Argentine forward known as 'El Apache'","Famously moved between Manchester clubs","Won the Champions League in 2008","His transfer between United and City sparked the 'Welcome to Manchester' poster"],
+    },
+    mystery: {
+      clues:["Born in Tres Corações, Brazil in 1940","Real name Edson Arantes do Nascimento","Won three FIFA World Cups","Scored a goal against Sweden in the 1958 final aged just 17","Spent most of his club career at Santos before a stint at New York Cosmos"],
+      player:"Pele",
+      options:["Pele","Garrincha","Rivellino","Tostao"],
+    },
+    trueOrFalse:[
+      {q:"Lionel Messi has won the FIFA World Cup with Argentina.",a:true,fact:"Messi finally lifted the World Cup at the 2022 tournament in Qatar, beating France on penalties after a 3-3 draw. He won the Golden Ball as the tournament's best player."},
+      {q:"Diego Maradona's 'Hand of God' goal was scored against England.",a:true,fact:"In the 1986 World Cup quarter-final in Mexico City, Maradona punched the ball past Peter Shilton and four minutes later scored what FIFA voted the 'Goal of the Century'."},
+      {q:"Brazil are the only nation to have played in every FIFA World Cup.",a:true,fact:"Brazil have qualified for all 22 World Cup tournaments held to date — the only country with a perfect record."},
+      {q:"Argentina have won more Copa América titles than any other nation.",a:true,fact:"Argentina lead the all-time list with 16 titles, narrowly ahead of Uruguay on 15 — a contest that's defined the South American game for over a century."},
+      {q:"Pelé won three FIFA World Cups with Brazil.",a:true,fact:"Pelé won in 1958 (aged 17), 1962, and 1970, though he played little in the 1962 tournament due to injury. He remains the only player to win three World Cups."},
+      {q:"Carlos Tevez never won the Premier League title.",a:false,fact:"Tevez won the title twice with Manchester United (2007/08, 2008/09) and once with Manchester City (2011/12), making him one of very few players to win it with both Manchester clubs."},
+      {q:"Diego Maradona's son also became a professional footballer.",a:true,fact:"Diego Sinagra (known as Diego Maradona Jr.) played semi-professionally in Italy and was officially recognised by his father in 2016 after a long legal dispute."},
+      {q:"Lionel Messi has scored over 800 career goals for club and country.",a:true,fact:"Messi passed 850 career senior goals during the 2024-25 season — combining tallies for Barcelona, PSG, Inter Miami and Argentina."},
+    ],
+  },
+  // ── DAY 23 ─────────────────────────────────────────────────────────────────
+  // Theme: Champions League / European Cup Finals — Istanbul, Munich, Porto
+  {
+    daily: { title:"European Glory Nights", subtitle:"Iconic Champions League finals — do you remember?", gameId:"pointless" },
+    tenable: {
+      question:"Top 10 Clubs by European Cup / Champions League Titles",
+      answers:[
+        {name:"Real Madrid",rank:1},{name:"AC Milan",rank:2},{name:"Bayern Munich",rank:3},
+        {name:"Liverpool",rank:4},{name:"Barcelona",rank:5},{name:"Ajax",rank:6},
+        {name:"Manchester United",rank:7},{name:"Inter Milan",rank:8},{name:"Benfica",rank:9},
+        {name:"Chelsea",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from Liverpool's 2005 'Miracle of Istanbul' Champions League squad",
+      answers:[
+        {name:"Steven Gerrard",popularity:98},{name:"Xabi Alonso",popularity:88},
+        {name:"Jamie Carragher",popularity:85},{name:"Jerzy Dudek",popularity:82},
+        {name:"Sami Hyypia",popularity:75},{name:"Luis Garcia",popularity:72},
+        {name:"Dietmar Hamann",popularity:78},{name:"John Arne Riise",popularity:65},
+        {name:"Steve Finnan",popularity:55},{name:"Vladimir Smicer",popularity:52},
+        {name:"Djimi Traore",popularity:38},{name:"Milan Baros",popularity:55},
+        {name:"Djibril Cisse",popularity:62},{name:"Harry Kewell",popularity:60},
+        {name:"Igor Biscan",popularity:30},{name:"Antonio Nunez",popularity:15},
+        {name:"Florent Sinama Pongolle",popularity:18},{name:"Scott Carson",popularity:20},
+      ],
+    },
+    careerPath: {
+      clubs:["Dynamo Kyiv","AC Milan","Chelsea","AC Milan","Dynamo Kyiv"],
+      player:"Andriy Shevchenko",
+      hints:["Ukrainian striker","Won the 2004 Ballon d'Or","Lifted the Champions League in 2003","A high-profile (and disappointing) Chelsea signing in 2006","Later managed the Ukraine national team"],
+    },
+    mystery: {
+      clues:["Polish goalkeeper born in Rybnik in 1973","Spent the bulk of his career at Liverpool","Famously distracted opposing penalty-takers with 'spaghetti legs' in a 2005 final","Saved Andriy Shevchenko's penalty to seal the trophy","Later became a backup keeper at Real Madrid"],
+      player:"Jerzy Dudek",
+      options:["Jerzy Dudek","Pepe Reina","Wojciech Szczesny","Lukasz Fabianski"],
+    },
+    trueOrFalse:[
+      {q:"Liverpool came back from 3-0 down at half-time to win the 2005 Champions League final.",a:true,fact:"Steven Gerrard, Vladimir Smicer and Xabi Alonso scored within six minutes to draw level with AC Milan, before Liverpool prevailed on penalties — forever known as the Miracle of Istanbul."},
+      {q:"Manchester United scored two goals in stoppage time to win the 1999 Champions League final.",a:true,fact:"Teddy Sheringham equalised in the 91st minute and Ole Gunnar Solskjaer scored the winner in the 93rd as United beat Bayern Munich 2-1 to complete the Treble."},
+      {q:"The 2012 Champions League final was won by Bayern Munich on home soil.",a:false,fact:"It was held at Bayern's Allianz Arena, but Chelsea won on penalties after Didier Drogba's 88th-minute equaliser. Drogba then scored the winning spot-kick."},
+      {q:"Sergio Ramos scored a 93rd-minute equaliser in the 2014 Champions League final.",a:true,fact:"Ramos's late header forced extra time in the all-Madrid final at the Estádio da Luz; Real then beat Atlético 4-1 to win 'La Décima', their tenth European Cup."},
+      {q:"José Mourinho won the Champions League with Porto in 2004.",a:true,fact:"Mourinho's Porto beat Monaco 3-0 at Gelsenkirchen — propelling 'The Special One' to a job at Chelsea later that summer."},
+      {q:"Real Madrid won three consecutive Champions League finals from 2016 to 2018.",a:true,fact:"Under Zinedine Zidane, Real beat Atlético (2016), Juventus (2017) and Liverpool (2018) — the first club to retain the trophy in the Champions League era and the first to win three in a row."},
+      {q:"Jürgen Klopp has won the Champions League with two different clubs.",a:false,fact:"Klopp lost the 2013 final with Borussia Dortmund and the 2018 final with Liverpool, before lifting it with Liverpool in 2019. He has only won the trophy with one club."},
+      {q:"The 2017 Champions League final was held in Cardiff.",a:true,fact:"Real Madrid beat Juventus 4-1 at the Principality Stadium — the first time the final had been played in Wales."},
+    ],
+  },
+  // ── DAY 24 ─────────────────────────────────────────────────────────────────
+  // Theme: Premier League Managers — Ferguson, Wenger, Mourinho, Guardiola, Klopp, Ranieri
+  {
+    daily: { title:"Touchline Greats", subtitle:"From Fergie to Pep — the men who shaped the Premier League", gameId:"mystery" },
+    tenable: {
+      question:"Top 10 Managers with Most Premier League Titles",
+      answers:[
+        {name:"Sir Alex Ferguson",rank:1},{name:"Pep Guardiola",rank:2},{name:"Jose Mourinho",rank:3},
+        {name:"Arsene Wenger",rank:4},{name:"Carlo Ancelotti",rank:5},{name:"Roberto Mancini",rank:6},
+        {name:"Manuel Pellegrini",rank:7},{name:"Claudio Ranieri",rank:8},{name:"Antonio Conte",rank:9},
+        {name:"Jurgen Klopp",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from Leicester City's 2015-16 Premier League winning squad",
+      answers:[
+        {name:"Jamie Vardy",popularity:98},{name:"Riyad Mahrez",popularity:95},
+        {name:"N'Golo Kante",popularity:92},{name:"Kasper Schmeichel",popularity:88},
+        {name:"Wes Morgan",popularity:75},{name:"Robert Huth",popularity:65},
+        {name:"Christian Fuchs",popularity:58},{name:"Danny Drinkwater",popularity:62},
+        {name:"Marc Albrighton",popularity:50},{name:"Shinji Okazaki",popularity:55},
+        {name:"Danny Simpson",popularity:45},{name:"Andy King",popularity:35},
+        {name:"Leonardo Ulloa",popularity:48},{name:"Jeffrey Schlupp",popularity:32},
+        {name:"Daniel Amartey",popularity:25},{name:"Demarai Gray",popularity:30},
+        {name:"Nathan Dyer",popularity:22},{name:"Gokhan Inler",popularity:18},
+      ],
+    },
+    careerPath: {
+      clubs:["Cobh Ramblers","Nottingham Forest","Manchester United","Celtic"],
+      player:"Roy Keane",
+      hints:["Irish midfielder","Captained his club to seven Premier League titles","Famous for his fiery temperament and on-pitch leadership","Later managed Sunderland and Ipswich Town","Ferguson's on-pitch lieutenant for over a decade"],
+    },
+    mystery: {
+      clues:["Born in Setúbal, Portugal in 1963","Began his career as a translator before becoming a coach","Won the Champions League with Porto in 2004 and Inter Milan in 2010","Famously declared himself 'The Special One' at his unveiling","Has had two separate spells managing Chelsea"],
+      player:"Jose Mourinho",
+      options:["Jose Mourinho","Andre Villas-Boas","Carlos Queiroz","Fernando Santos"],
+    },
+    trueOrFalse:[
+      {q:"Sir Alex Ferguson won 13 Premier League titles with Manchester United.",a:true,fact:"Ferguson's first PL title came in 1992-93 and his 13th in 2012-13, his final season. Across all competitions he won 38 trophies as United manager — a record unlikely ever to be matched."},
+      {q:"Arsène Wenger went the entire 2003-04 Premier League season unbeaten.",a:true,fact:"Wenger's 'Invincibles' won 26 and drew 12 of their 38 league games — the only team to go a full 38-game PL season unbeaten."},
+      {q:"Pep Guardiola has managed Manchester City since 2016.",a:true,fact:"Guardiola joined City from Bayern Munich in summer 2016 and has gone on to win six Premier League titles, an FA Cup, four League Cups and the 2023 Champions League with the club."},
+      {q:"Claudio Ranieri won the Premier League with Leicester City in his first season at the club.",a:true,fact:"Ranieri took charge in July 2015 and led 5000-1 outsiders Leicester to the title in May 2016 — perhaps the greatest Cinderella story in modern football."},
+      {q:"José Mourinho has never managed Tottenham Hotspur.",a:false,fact:"Mourinho managed Spurs from November 2019 until April 2021, when he was sacked just six days before the 2021 League Cup final."},
+      {q:"Jürgen Klopp's Liverpool ended a 30-year wait for the league title in 2019-20.",a:true,fact:"Liverpool last won the old First Division in 1989-90 — their 2019-20 PL crown was their first top-flight title in exactly 30 years, sealed in June 2020."},
+      {q:"Sir Alex Ferguson is from Glasgow.",a:true,fact:"Ferguson was born in Govan, Glasgow in 1941 and started his managerial career at East Stirlingshire in 1974 before St Mirren and Aberdeen."},
+      {q:"Antonio Conte has managed both Chelsea and Tottenham in the Premier League.",a:true,fact:"Conte won the 2016-17 PL title in his debut season at Chelsea and later took charge of Spurs from November 2021 to March 2023."},
+    ],
+  },
+  // ── DAY 25 ─────────────────────────────────────────────────────────────────
+  // Theme: Qatar 2022 — The Messi Coronation
+  {
+    daily: { title:"Qatar 2022", subtitle:"How well do you remember the Messi coronation?", gameId:"trueOrFalse" },
+    tenable: {
+      question:"Top 10 Goal Scorers at the 2022 FIFA World Cup",
+      answers:[
+        {name:"Kylian Mbappe",rank:1},{name:"Lionel Messi",rank:2},{name:"Olivier Giroud",rank:3},
+        {name:"Julian Alvarez",rank:4},{name:"Alvaro Morata",rank:5},{name:"Cody Gakpo",rank:6},
+        {name:"Marcus Rashford",rank:7},{name:"Enner Valencia",rank:8},{name:"Bukayo Saka",rank:9},
+        {name:"Richarlison",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from Argentina's 2022 World Cup winning squad",
+      answers:[
+        {name:"Lionel Messi",popularity:99},{name:"Angel Di Maria",popularity:90},
+        {name:"Emiliano Martinez",popularity:88},{name:"Julian Alvarez",popularity:82},
+        {name:"Lautaro Martinez",popularity:80},{name:"Rodrigo De Paul",popularity:75},
+        {name:"Enzo Fernandez",popularity:78},{name:"Alexis Mac Allister",popularity:78},
+        {name:"Cristian Romero",popularity:72},{name:"Nicolas Otamendi",popularity:70},
+        {name:"Lisandro Martinez",popularity:65},{name:"Leandro Paredes",popularity:55},
+        {name:"Marcos Acuna",popularity:50},{name:"Nahuel Molina",popularity:48},
+        {name:"Nicolas Tagliafico",popularity:45},{name:"Paulo Dybala",popularity:62},
+        {name:"Papu Gomez",popularity:40},{name:"Geronimo Rulli",popularity:22},
+      ],
+    },
+    careerPath: {
+      clubs:["Rosario Central","Benfica","Real Madrid","Manchester United","Paris Saint-Germain","Juventus","Benfica"],
+      player:"Angel Di Maria",
+      hints:["Argentine winger born in Rosario in 1988","Olympic gold medallist with Argentina at Beijing 2008","Scored Argentina's third goal in the 2022 World Cup final","Spent much of his prime at Paris Saint-Germain","Returned to Benfica for a second spell in his late thirties"],
+    },
+    mystery: {
+      clues:["Argentine goalkeeper born in Mar del Plata in 1992","Spent years on loan from Arsenal before establishing himself at Aston Villa","Saved the decisive penalty in the 2022 World Cup final shoot-out","His extra-time stop from Randal Kolo Muani is one of the great World Cup final saves","Won the Yashin Trophy in 2022 and 2023"],
+      player:"Emiliano Martinez",
+      options:["Emiliano Martinez","Sergio Romero","Franco Armani","Geronimo Rulli"],
+    },
+    trueOrFalse:[
+      {q:"Argentina lost their opening match of the 2022 World Cup to Saudi Arabia.",a:true,fact:"Saudi Arabia stunned Argentina 2-1 in Lusail on 22 November 2022 — one of the biggest upsets in World Cup history. Argentina then won every match that followed to lift the trophy."},
+      {q:"Kylian Mbappe scored a hat-trick in the 2022 World Cup final.",a:true,fact:"Mbappe became the first player since Geoff Hurst in 1966 to score a hat-trick in a World Cup final, taking the match into a penalty shoot-out at 3-3 — but Argentina prevailed."},
+      {q:"Morocco became the first African nation to reach a World Cup semi-final at Qatar 2022.",a:true,fact:"Walid Regragui's side beat Belgium, Spain and Portugal en route to the last four, where they lost 2-0 to eventual finalists France."},
+      {q:"The 2022 World Cup was the first to be held in November and December.",a:true,fact:"FIFA moved the tournament to the Northern Hemisphere winter to avoid Qatar's summer heat — the only Northern winter World Cup ever held."},
+      {q:"Brazil won the 2022 World Cup.",a:false,fact:"Brazil were eliminated by Croatia in the quarter-finals on penalties after a 1-1 draw — their fifth-straight failure to reach a World Cup semi-final."},
+      {q:"Wales returned to the World Cup at Qatar 2022 for the first time since 1958.",a:true,fact:"Gareth Bale's Wales ended a 64-year absence from the finals, but exited at the group stage with one point from three games."},
+      {q:"Lionel Messi won the Golden Boot at the 2022 World Cup.",a:false,fact:"Messi won the Golden Ball as the tournament's best player with 7 goals; Mbappe took the Golden Boot with 8 goals despite finishing on the losing side."},
+      {q:"Lionel Messi scored in every knockout-round match Argentina played at the 2022 World Cup.",a:true,fact:"Messi scored against Australia (R16), Netherlands (QF), Croatia (SF) and France (twice in the final) — a goal in every single elimination match of the tournament."},
+    ],
+  },
+  // ── DAY 26 ─────────────────────────────────────────────────────────────────
+  // Theme: La Liga & El Clásico — Real Madrid v Barcelona
+  {
+    daily: { title:"El Clasico", subtitle:"Real Madrid v Barcelona — football's biggest rivalry", gameId:"careerPath" },
+    tenable: {
+      question:"Top 10 La Liga All-Time Top Scorers",
+      answers:[
+        {name:"Lionel Messi",rank:1},{name:"Cristiano Ronaldo",rank:2},{name:"Telmo Zarra",rank:3},
+        {name:"Karim Benzema",rank:4},{name:"Hugo Sanchez",rank:5},{name:"Raul",rank:6},
+        {name:"Alfredo Di Stefano",rank:7},{name:"Cesar Rodriguez",rank:8},{name:"Quini",rank:9},
+        {name:"Pahino",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from Real Madrid's 2021-22 Champions League winning squad",
+      answers:[
+        {name:"Karim Benzema",popularity:98},{name:"Vinicius Junior",popularity:95},
+        {name:"Luka Modric",popularity:92},{name:"Toni Kroos",popularity:90},
+        {name:"Casemiro",popularity:88},{name:"Thibaut Courtois",popularity:90},
+        {name:"David Alaba",popularity:78},{name:"Eder Militao",popularity:70},
+        {name:"Dani Carvajal",popularity:65},{name:"Federico Valverde",popularity:72},
+        {name:"Marco Asensio",popularity:68},{name:"Rodrygo",popularity:75},
+        {name:"Eduardo Camavinga",popularity:62},{name:"Ferland Mendy",popularity:55},
+        {name:"Nacho",popularity:42},{name:"Lucas Vazquez",popularity:38},
+        {name:"Marcelo",popularity:80},{name:"Eden Hazard",popularity:62},
+      ],
+    },
+    careerPath: {
+      clubs:["Sevilla","Real Madrid","Paris Saint-Germain","Sevilla"],
+      player:"Sergio Ramos",
+      hints:["Spanish defender born in Camas, Sevilla","Real Madrid captain for many years","Scored a 93rd-minute equaliser in the 2014 Champions League final","Won 4 Champions Leagues and 5 La Liga titles with Madrid","Returned to his boyhood club in 2023 after a spell in France"],
+    },
+    mystery: {
+      clues:["Spanish midfielder born in Terrassa in 1980","Spent his entire La Liga career at Barcelona","Won 8 La Liga titles and 4 Champions League trophies as a player","Set up Andres Iniesta's Wembley winner in the 2009 Champions League final","Returned to Barcelona as head coach in November 2021"],
+      player:"Xavi Hernandez",
+      options:["Xavi Hernandez","Andres Iniesta","Sergio Busquets","Cesc Fabregas"],
+    },
+    trueOrFalse:[
+      {q:"Lionel Messi is La Liga's all-time top scorer.",a:true,fact:"Messi scored 474 goals in 520 La Liga appearances for Barcelona — a tally well clear of Cristiano Ronaldo's 311. He also holds the single-season record with 50 in 2011-12."},
+      {q:"Real Madrid have won La Liga more times than Barcelona.",a:true,fact:"Real Madrid lead the all-time list with 36 La Liga titles to Barcelona's 27 — a gap that's held throughout most of the league's history."},
+      {q:"Atletico Madrid have never won the Champions League.",a:true,fact:"Atletico have lost three European Cup / Champions League finals (1974 v Bayern, 2014 v Real Madrid, 2016 v Real Madrid) but have never lifted the trophy."},
+      {q:"Cristiano Ronaldo and Lionel Messi together have won more than 12 Ballon d'Or awards.",a:true,fact:"Messi has won 8 (2009, 2010, 2011, 2012, 2015, 2019, 2021, 2023) and Ronaldo 5 (2008, 2013, 2014, 2016, 2017) — 13 between them, dominating the award for over a decade."},
+      {q:"Pep Guardiola's Barcelona beat Real Madrid 5-0 at the Camp Nou in November 2010.",a:true,fact:"Often called the 'Manita' (little hand of five), Barcelona's display that night — featuring goals from Xavi, Pedro, Villa (2) and Jeffren — is regarded as one of the great Clasico performances."},
+      {q:"Diego Simeone won La Liga with Atletico Madrid in 2013-14.",a:true,fact:"Simeone's Atletico ended Madrid/Barca's stranglehold by clinching the title with a 1-1 draw at the Camp Nou on the final day — their first La Liga since 1996."},
+      {q:"Xavi Hernandez won the Ballon d'Or while playing for Barcelona.",a:false,fact:"Despite finishing third in 2009, 2010 and 2011, Xavi never won the Ballon d'Or — those years went to Messi (2009-12) and Cristiano Ronaldo, with Xavi forever the great unrewarded playmaker."},
+      {q:"Iker Casillas won three Champions League titles with Real Madrid.",a:true,fact:"Casillas lifted the trophy in 2000, 2002 and 2014 — bookending two distinct Madrid eras and earning him a place in the European football pantheon."},
+    ],
+  },
+  // ── DAY 27 ─────────────────────────────────────────────────────────────────
+  // Theme: Les Bleus — France from Platini to Mbappé
+  {
+    daily: { title:"Les Bleus", subtitle:"From Platini to Mbappe — France's football heritage", gameId:"pointless" },
+    tenable: {
+      question:"Top 10 France All-Time International Goal Scorers",
+      answers:[
+        {name:"Olivier Giroud",rank:1},{name:"Thierry Henry",rank:2},{name:"Kylian Mbappe",rank:3},
+        {name:"Antoine Griezmann",rank:4},{name:"Michel Platini",rank:5},{name:"Karim Benzema",rank:6},
+        {name:"David Trezeguet",rank:7},{name:"Zinedine Zidane",rank:8},{name:"Just Fontaine",rank:9},
+        {name:"Jean-Pierre Papin",rank:10},
+      ],
+    },
+    pointless: {
+      question:"Name players from France's 1998 World Cup winning squad",
+      answers:[
+        {name:"Zinedine Zidane",popularity:98},{name:"Thierry Henry",popularity:92},
+        {name:"Marcel Desailly",popularity:85},{name:"Lilian Thuram",popularity:80},
+        {name:"Patrick Vieira",popularity:82},{name:"Didier Deschamps",popularity:88},
+        {name:"Fabien Barthez",popularity:78},{name:"Laurent Blanc",popularity:75},
+        {name:"Bixente Lizarazu",popularity:70},{name:"Emmanuel Petit",popularity:72},
+        {name:"Youri Djorkaeff",popularity:65},{name:"Christian Karembeu",popularity:55},
+        {name:"Robert Pires",popularity:62},{name:"David Trezeguet",popularity:60},
+        {name:"Frank Leboeuf",popularity:50},{name:"Stephane Guivarc'h",popularity:42},
+        {name:"Christophe Dugarry",popularity:40},{name:"Vincent Candela",popularity:30},
+        {name:"Bernard Diomede",popularity:20},{name:"Alain Boghossian",popularity:25},
+      ],
+    },
+    careerPath: {
+      clubs:["Cannes","Bordeaux","Juventus","Real Madrid"],
+      player:"Zinedine Zidane",
+      hints:["French midfielder born in Marseille in 1972","Won the 1998 World Cup with France on home soil","Won the 1998 Ballon d'Or","Scored a stunning left-foot volley in the 2002 Champions League final","Sent off in the 2006 World Cup final after headbutting Marco Materazzi"],
+    },
+    mystery: {
+      clues:["French striker born in Morocco in 1933","Holds the record for goals scored in a single World Cup tournament","Scored 13 goals in 6 matches at the 1958 World Cup in Sweden","Spent the prime of his club career at Stade de Reims","Forced into early retirement at 28 due to injury, later managed France briefly"],
+      player:"Just Fontaine",
+      options:["Just Fontaine","Roger Piantoni","Raymond Kopa","Jean Vincent"],
+    },
+    trueOrFalse:[
+      {q:"France have won the FIFA World Cup three times.",a:false,fact:"France have won twice — 1998 on home soil under Aimé Jacquet, and 2018 in Russia under Didier Deschamps. They also lost the 2006 and 2022 finals."},
+      {q:"Just Fontaine's 13 goals at the 1958 World Cup remain a single-tournament record.",a:true,fact:"No player has come close in the modern era — even Mbappe and Messi at Qatar 2022 finished on 8 and 7 respectively. Fontaine's record has stood for over 65 years."},
+      {q:"Michel Platini won three consecutive Ballon d'Or awards.",a:true,fact:"Platini won the Ballon d'Or in 1983, 1984 and 1985 — the only player ever to win it three years running until Lionel Messi matched the feat in 2009-12."},
+      {q:"Kylian Mbappe scored a hat-trick in his first World Cup final.",a:false,fact:"Mbappe's first WC final was 2018 v Croatia, where he scored once in a 4-2 win. His hat-trick came in the 2022 final v Argentina — his second World Cup final, and a losing one."},
+      {q:"Zinedine Zidane scored two headers in the 1998 World Cup final.",a:true,fact:"Zidane headed France in front in the 27th minute and added a second on the stroke of half-time — both from corners — as France beat Brazil 3-0 at the Stade de France."},
+      {q:"France's first major international trophy was Euro 1984 on home soil.",a:true,fact:"Michel Platini's France beat Spain 2-0 in the final at Parc des Princes; Platini was the tournament's top scorer with 9 goals in 5 matches — another all-time record."},
+      {q:"Didier Deschamps has won the World Cup as both a player and a manager.",a:true,fact:"Deschamps captained France to the 1998 title and managed them to victory in 2018, joining Mario Zagallo and Franz Beckenbauer as the only men to do both."},
+      {q:"Thierry Henry remains France's all-time top scorer.",a:false,fact:"Olivier Giroud surpassed Henry's tally of 51 in early 2023 and finished his France career on 57 — a record that may not stand for long if Mbappe stays healthy."},
+    ],
+  },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACHIEVEMENTS
+// ─────────────────────────────────────────────────────────────────────────────
+const ACHIEVEMENTS = [
+  {id:"first_game",   name:"First Steps",      emoji:"🎯",description:"Play your first game",   condition:s=>s.gamesPlayed>=1},
+  {id:"perfect_ten",  name:"Perfect 10",        emoji:"💯",description:"All 10 in Top 10",       condition:s=>s.perfectGames>=1},
+  {id:"streak_3",     name:"Hat-Trick Hero",    emoji:"🔥",description:"3-day streak",           condition:s=>s.streak>=3},
+  {id:"streak_7",     name:"Week Warrior",      emoji:"⚡",description:"7-day streak",           condition:s=>s.streak>=7},
+  {id:"combo_master", name:"Combo Master",      emoji:"🎭",description:"Land a 5× combo",       condition:s=>s.comboStreak>=5},
+  {id:"games_10",     name:"Getting Started",   emoji:"🌟",description:"Play 10 games",          condition:s=>s.gamesPlayed>=10},
+  {id:"bks_50",       name:"Knowledge Builder", emoji:"📚",description:"Reach BKS 50",          condition:s=>s.bks>=50},
+  {id:"bks_90",       name:"Elite Status",      emoji:"👑",description:"Reach BKS 90",          condition:s=>s.bks>=90},
+  {id:"daily_7",      name:"Daily Devotee",     emoji:"📅",description:"Complete 7 daily challenges",condition:s=>s.dailyStreak>=7},
+];
+
+const LEADERBOARD_DATA = [
+  {rank:1,name:"FootballGuru99",xp:12840,streak:45},
+  {rank:2,name:"MatchdayMike",  xp:11200,streak:32},
+  {rank:3,name:"TacticsTom",    xp:9870, streak:28},
+  {rank:4,name:"KloppsKing",    xp:4200, streak:15},
+  {rank:5,name:"GegenPressGav", xp:3100, streak:9 },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DAILY CHALLENGE HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+const getDayIndex = () => Math.floor(Date.now() / 86400000) % QUIZ_DB.length;
+const getTodayQuiz = () => QUIZ_DB[getDayIndex()];
+const getTodayKey  = () => new Date().toISOString().slice(0,10);
+
+function useCountdown() {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(()=>{
+    const tick=()=>{
+      const now=new Date();
+      const midnight=new Date(); midnight.setHours(24,0,0,0);
+      setSeconds(Math.floor((midnight-now)/1000));
+    };
+    tick();
+    const t=setInterval(tick,1000);
+    return ()=>clearInterval(t);
+  },[]);
+  const h=Math.floor(seconds/3600);
+  const m=Math.floor((seconds%3600)/60);
+  const s=seconds%60;
+  return `${h}h ${m}m ${s}s`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UI PRIMITIVES
+// ─────────────────────────────────────────────────────────────────────────────
+function RaisedBtn({bg,dk,color="#fff",onClick,children,style={},disabled=false,small=false}){
+  const [p,setP]=useState(false);
+  const on=p&&!disabled;
+  return(
+    <div onClick={!disabled?onClick:undefined}
+      onMouseDown={()=>!disabled&&setP(true)} onMouseUp={()=>setP(false)}
+      onMouseLeave={()=>setP(false)} onTouchStart={()=>!disabled&&setP(true)} onTouchEnd={()=>setP(false)}
+      style={{background:disabled?"#e2e8f0":bg,border:`2px solid ${disabled?"#c7d2fe":dk}`,borderRadius:18,
+        boxShadow:on||disabled?`0 2px 0 ${disabled?"#c7d2fe":dk}`:`0 6px 0 ${dk}`,
+        transform:on?"translateY(4px)":"translateY(0)",
+        padding:small?"9px 18px":"14px 22px",color:disabled?"#94a3b8":color,
+        fontWeight:900,fontSize:small?13:15,fontFamily:FONT,textAlign:"center",
+        cursor:disabled?"not-allowed":"pointer",transition:"all 0.1s",userSelect:"none",...style}}>{children}</div>
+  );
+}
+
+function SmallBtn({bg,dk,color="#fff",onClick,children,style={}}){
+  const [p,setP]=useState(false);
+  return(
+    <div onClick={onClick} onMouseDown={()=>setP(true)} onMouseUp={()=>setP(false)} onMouseLeave={()=>setP(false)}
+      style={{background:bg,border:`2px solid ${dk}`,borderRadius:14,
+        boxShadow:p?`0 2px 0 ${dk}`:`0 4px 0 ${dk}`,transform:p?"translateY(2px)":"translateY(0)",
+        padding:"9px 16px",color,fontWeight:900,fontSize:13,fontFamily:FONT,
+        textAlign:"center",cursor:"pointer",transition:"all 0.1s",userSelect:"none",...style}}>{children}</div>
+  );
+}
+
+function Tag({label}){
+  const m={HOT:[C.red,"#fff"],NEW:[C.green,"#fff"],DAILY:[C.yellow,C.txt],SOON:["#e2e8f0",C.txtLight]};
+  const [bg,col]=m[label]||["#aaa","#fff"];
+  return <div style={{background:bg,color:col,borderRadius:8,padding:"2px 9px",fontSize:9,fontWeight:900,fontFamily:"Arial",letterSpacing:1,display:"inline-block"}}>{label}</div>;
+}
+
+function HeartBar({current,max=5}){
+  return <div style={{display:"flex",gap:3}}>{Array.from({length:max}).map((_,i)=><span key={i} style={{fontSize:18,opacity:i<current?1:0.22}}>❤️</span>)}</div>;
+}
+
+function ProgressBar({value,max,bg=C.blue,h=12}){
+  return(
+    <div style={{background:"#e8eaf6",borderRadius:20,height:h,overflow:"hidden",border:"2px solid #c7d2fe"}}>
+      <div style={{width:`${Math.min(100,(value/max)*100)}%`,height:"100%",background:`linear-gradient(90deg,${bg},${C.cyan})`,borderRadius:20,transition:"width 0.4s"}}/>
+    </div>
+  );
+}
+
+function AutocompleteInput({value,onChange,onSubmit,suggestions,onSelectSuggestion,placeholder,accent=C.blue}){
+  return(
+    <div style={{position:"relative"}}>
+      <div style={{display:"flex",gap:10}}>
+        <input value={value} onChange={e=>onChange(e.target.value)} onKeyDown={e=>e.key==="Enter"&&onSubmit()}
+          placeholder={placeholder}
+          style={{flex:1,padding:"13px 16px",border:`2px solid ${C.border}`,borderRadius:16,
+            fontSize:14,fontFamily:FONT,fontWeight:700,outline:"none",color:C.txt,
+            boxShadow:`0 4px 0 ${C.border}`}}
+          onFocus={e=>{e.target.style.borderColor=accent;e.target.style.boxShadow=`0 4px 0 ${accent}40`;}}
+          onBlur={e=>{e.target.style.borderColor=C.border;e.target.style.boxShadow=`0 4px 0 ${C.border}`;}}
+        />
+        <RaisedBtn bg={accent} dk={accent+"cc"} onClick={onSubmit} style={{padding:"13px 18px",borderRadius:16,fontSize:13}}>GUESS</RaisedBtn>
+      </div>
+      {suggestions.length>0&&(
+        <div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:6,background:"#fff",
+          border:`2px solid ${accent}`,borderRadius:16,boxShadow:"0 8px 30px #0002",zIndex:50,maxHeight:200,overflowY:"auto"}}>
+          {suggestions.map((s,i)=>(
+            <div key={i} onClick={()=>onSelectSuggestion(s)}
+              style={{padding:"11px 16px",cursor:"pointer",fontFamily:FONT,fontWeight:700,fontSize:13,color:C.txt,
+                borderBottom:i<suggestions.length-1?`1px solid ${C.border}`:"none"}}
+              onMouseEnter={e=>e.currentTarget.style.background="#f0f4ff"}
+              onMouseLeave={e=>e.currentTarget.style.background="#fff"}>{s}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ResultBanner({correct,message,fact,onNext}){
+  const bg=correct?C.green:C.red;
+  const dk=correct?C.greenDk:C.redDk;
+  return(
+    <div style={{background:bg,border:`2px solid ${dk}`,borderRadius:20,padding:"20px 20px 16px",
+      boxShadow:`0 5px 0 ${dk}`,marginTop:16}}>
+      <div style={{fontSize:20,fontWeight:900,color:"#fff",marginBottom:4,fontFamily:FONT}}>{correct?"🎉":"😬"} {message}</div>
+      <div style={{fontSize:13,color:"#ffffffcc",fontFamily:"Arial",marginBottom:14}}>{fact}</div>
+      <RaisedBtn bg="#fff" dk={C.border} color={bg} onClick={onNext} style={{borderRadius:14}}>NEXT →</RaisedBtn>
+    </div>
+  );
+}
+
+function GuessChips({guesses,answers}){
+  if(!guesses.length) return null;
+  const ok=g=>answers.some(a=>a.name.toLowerCase()===g.toLowerCase());
+  return(
+    <div style={{marginTop:16,paddingTop:16,borderTop:`2px solid ${C.border}`}}>
+      <div style={{fontSize:10,color:C.txtLight,fontFamily:"Arial",fontWeight:800,letterSpacing:2,marginBottom:8}}>YOUR GUESSES</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+        {guesses.map((g,i)=>(
+          <div key={i} style={{background:ok(g)?C.green:C.red,color:"#fff",borderRadius:20,
+            padding:"5px 12px",fontSize:11,fontWeight:900,fontFamily:FONT}}>{g} {ok(g)?"✓":"✗"}</div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BottomNav({active,onNav}){
+  return(
+    <div style={{position:"fixed",bottom:0,left:0,right:0,background:"#fff",
+      borderTop:`2px solid ${C.border}`,display:"flex",justifyContent:"space-around",
+      padding:"10px 0 18px",boxShadow:"0 -4px 20px #0001",zIndex:100}}>
+      {[{id:"home",icon:"🎮",label:"Play"},{id:"stats",icon:"📊",label:"Stats"},{id:"league",icon:"🏆",label:"Leagues"},{id:"profile",icon:"👤",label:"Profile"}].map(t=>(
+        <div key={t.id} onClick={()=>onNav(t.id)}
+          style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4,cursor:"pointer",position:"relative"}}>
+          {active===t.id&&<div style={{position:"absolute",top:-10,width:40,height:3,background:C.blue,borderRadius:3}}/>}
+          {t.id==="home"
+            ?<div style={{width:50,height:50,background:C.blue,border:`2px solid ${C.blueDk}`,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",marginTop:-22,fontSize:22,boxShadow:`0 4px 0 ${C.blueDk}`}}>{t.icon}</div>
+            :<div style={{fontSize:22,opacity:active===t.id?1:0.35}}>{t.icon}</div>}
+          <div style={{fontSize:10,fontFamily:"Arial",fontWeight:800,color:active===t.id?C.blue:C.txtFaint,...(t.id==="home"?{marginTop:6}:{})}}>{t.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AchievementPopup({achievement,onDone}){
+  useEffect(()=>{const t=setTimeout(onDone,4000);return()=>clearTimeout(t);},[]);
+  return(
+    <div style={{position:"fixed",top:80,right:16,zIndex:200,
+      background:`linear-gradient(135deg,${C.yellow},${C.orange})`,
+      border:"3px solid #fff",borderRadius:20,padding:"16px 20px",
+      boxShadow:"0 8px 30px #0003",maxWidth:280,animation:"slideIn 0.5s ease-out"}}>
+      <div style={{display:"flex",gap:12,alignItems:"center"}}>
+        <div style={{fontSize:40}}>{achievement.emoji}</div>
+        <div>
+          <div style={{fontSize:10,color:"#fff9",fontFamily:"Arial",fontWeight:800,letterSpacing:2}}>ACHIEVEMENT!</div>
+          <div style={{fontSize:15,fontWeight:900,color:"#fff",fontFamily:FONT}}>{achievement.name}</div>
+          <div style={{fontSize:11,color:"#ffffffcc",fontFamily:"Arial"}}>{achievement.description}</div>
+        </div>
+      </div>
+      <style>{`@keyframes slideIn{from{transform:translateX(300px);opacity:0}to{transform:translateX(0);opacity:1}}`}</style>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LOGO (placeholder — swap <div> for <img src={logo} style={{height:42}} />)
+// ─────────────────────────────────────────────────────────────────────────────
+function Logo(){
+  return(
+    <div style={{display:"flex",alignItems:"center",gap:10}}>
+      <div style={{height:42,width:42,background:`linear-gradient(135deg,${C.blue},${C.cyan})`,
+        borderRadius:14,display:"flex",alignItems:"center",justifyContent:"center",
+        fontSize:22,border:`2px solid ${C.blueDk}`,boxShadow:`0 3px 0 ${C.blueDk}`}}>⚽</div>
+      <div>
+        <div style={{fontSize:17,fontWeight:900,
+          background:"linear-gradient(180deg,#ef4444 0%,#f97316 50%,#fbbf24 100%)",
+          WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text",
+          filter:"drop-shadow(2px 2px 0 #1e3a8a)",letterSpacing:0.5}}>BALL KNOWLEDGE</div>
+        <div style={{fontSize:10,color:C.txtFaint,fontFamily:"Arial",marginTop:1}}>The Football Brain Test</div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCREEN: LOGIN / SIGNUP
+// ─────────────────────────────────────────────────────────────────────────────
+function LoginScreen({onLogin}){
+  const [isSignUp,setIsSignUp]=useState(false);
+  const [username,setUsername]=useState("");
+  const [password,setPassword]=useState("");
+  const [email,setEmail]=useState("");
+  const [error,setError]=useState("");
+  const [showPass,setShowPass]=useState(false);
+
+  const inputStyle={
+    width:"100%",padding:"14px 16px",border:`2px solid ${C.border}`,borderRadius:16,
+    fontSize:14,fontFamily:FONT,fontWeight:700,outline:"none",color:C.txt,
+    boxShadow:`0 4px 0 ${C.border}`,boxSizing:"border-box",
+  };
+
+  const submit=()=>{
+    if(!username.trim()||!password.trim()){setError("Please fill in all fields.");return;}
+    if(password.length<6){setError("Password must be at least 6 characters.");return;}
+    if(isSignUp&&!email.trim()){setError("Please enter your email.");return;}
+    onLogin({username:username.trim(),email:email.trim()||`${username}@ballknowledge.com`});
+  };
+
+  return(
+    <div style={{background:C.offWhite,minHeight:"100vh",fontFamily:FONT,display:"flex",flexDirection:"column"}}>
+      {/* Top banner */}
+      <div style={{background:`linear-gradient(135deg,${C.blue},${C.cyan})`,padding:"50px 24px 60px",
+        borderRadius:"0 0 48px 48px",textAlign:"center",boxShadow:`0 8px 30px ${C.blue}40`}}>
+        {/* Logo — swap for real image */}
+        <div style={{width:90,height:90,background:"#fff",border:`4px solid ${C.yellow}`,
+          boxShadow:`0 5px 0 ${C.yelDk}`,borderRadius:28,margin:"0 auto 16px",
+          display:"flex",alignItems:"center",justifyContent:"center",fontSize:46}}>⚽</div>
+        <div style={{fontSize:28,fontWeight:900,
+          background:"linear-gradient(180deg,#ef4444 0%,#f97316 50%,#fbbf24 100%)",
+          WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text",
+          filter:"drop-shadow(2px 3px 0 #1e3a8a)",marginBottom:6}}>BALL KNOWLEDGE</div>
+        <div style={{fontSize:14,color:"#e0f2fe",fontFamily:"Arial"}}>Test your football brain every day</div>
+      </div>
+
+      {/* Toggle tabs */}
+      <div style={{display:"flex",margin:"28px 24px 0",background:"#e8eaf6",borderRadius:20,padding:4}}>
+        {["Log In","Sign Up"].map((t,i)=>(
+          <div key={t} onClick={()=>{setIsSignUp(i===1);setError("");}}
+            style={{flex:1,padding:"10px 0",textAlign:"center",borderRadius:16,cursor:"pointer",
+              background:(!isSignUp&&i===0)||(isSignUp&&i===1)?"#fff":"transparent",
+              fontWeight:900,fontSize:14,color:(!isSignUp&&i===0)||(isSignUp&&i===1)?C.blue:C.txtLight,
+              boxShadow:(!isSignUp&&i===0)||(isSignUp&&i===1)?"0 3px 10px #0001":"none",
+              transition:"all 0.2s"}}>{t}</div>
+        ))}
+      </div>
+
+      {/* Form */}
+      <div style={{padding:"24px 24px 0",display:"flex",flexDirection:"column",gap:14}}>
+        {isSignUp&&(
+          <div>
+            <div style={{fontSize:11,color:C.txtLight,fontFamily:"Arial",fontWeight:800,letterSpacing:1.5,marginBottom:6}}>EMAIL</div>
+            <input value={email} onChange={e=>setEmail(e.target.value)} placeholder="your@email.com"
+              type="email" style={inputStyle}
+              onFocus={e=>{e.target.style.borderColor=C.blue;e.target.style.boxShadow=`0 4px 0 ${C.blueDk}40`;}}
+              onBlur={e=>{e.target.style.borderColor=C.border;e.target.style.boxShadow=`0 4px 0 ${C.border}`;}}/>
+          </div>
+        )}
+        <div>
+          <div style={{fontSize:11,color:C.txtLight,fontFamily:"Arial",fontWeight:800,letterSpacing:1.5,marginBottom:6}}>USERNAME</div>
+          <input value={username} onChange={e=>setUsername(e.target.value)} placeholder="FootballFan99"
+            style={inputStyle}
+            onFocus={e=>{e.target.style.borderColor=C.blue;e.target.style.boxShadow=`0 4px 0 ${C.blueDk}40`;}}
+            onBlur={e=>{e.target.style.borderColor=C.border;e.target.style.boxShadow=`0 4px 0 ${C.border}`;}}/>
+        </div>
+        <div>
+          <div style={{fontSize:11,color:C.txtLight,fontFamily:"Arial",fontWeight:800,letterSpacing:1.5,marginBottom:6}}>PASSWORD</div>
+          <div style={{position:"relative"}}>
+            <input value={password} onChange={e=>setPassword(e.target.value)} type={showPass?"text":"password"}
+              placeholder="At least 6 characters" style={{...inputStyle,paddingRight:50}}
+              onKeyDown={e=>e.key==="Enter"&&submit()}
+              onFocus={e=>{e.target.style.borderColor=C.blue;e.target.style.boxShadow=`0 4px 0 ${C.blueDk}40`;}}
+              onBlur={e=>{e.target.style.borderColor=C.border;e.target.style.boxShadow=`0 4px 0 ${C.border}`;}}/>
+            <div onClick={()=>setShowPass(s=>!s)} style={{position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",cursor:"pointer",fontSize:18}}>{showPass?"🙈":"👁️"}</div>
+          </div>
+        </div>
+
+        {error&&<div style={{background:"#fff5f5",border:`2px solid ${C.red}`,borderRadius:14,padding:"10px 14px",
+          fontSize:13,color:C.red,fontFamily:"Arial",fontWeight:700}}>{error}</div>}
+
+        <RaisedBtn bg={C.blue} dk={C.blueDk} onClick={submit} style={{marginTop:4}}>
+          {isSignUp?"CREATE ACCOUNT ⚽":"LOG IN →"}
+        </RaisedBtn>
+
+        <div style={{textAlign:"center",padding:"8px 0"}}>
+          <div style={{fontSize:12,color:C.txtFaint,fontFamily:"Arial",marginBottom:12}}>— or —</div>
+          <RaisedBtn bg="#fff" dk={C.border} color={C.txtLight} onClick={()=>onLogin({username:"Guest",email:"guest@bk.com",isGuest:true})} small
+            style={{borderRadius:14}}>Continue as Guest 👤</RaisedBtn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GAMES
+// ─────────────────────────────────────────────────────────────────────────────
+function TopTenGame({quiz,onFinish}){
+  const {question,answers}=quiz;
+  const [guess,setGuess]=useState("");const [sugg,setSugg]=useState([]);
+  const [rev,setRev]=useState(Array(10).fill(false));
+  const [guesses,setGuesses]=useState([]);
+  const [score,setScore]=useState(0);const [lives,setLives]=useState(3);
+  const [combo,setCombo]=useState(0);const [hints,setHints]=useState(2);
+  const [hintMsg,setHintMsg]=useState(null);const [done,setDone]=useState(false);
+  const [elapsed,setElapsed]=useState(0);const st=useRef(Date.now());
+  useEffect(()=>{if(done)return;const t=setInterval(()=>setElapsed(Math.floor((Date.now()-st.current)/1000)),1000);return()=>clearInterval(t);},[done]);
+  const fmt=s=>`${Math.floor(s/60)}:${(s%60).toString().padStart(2,"0")}`;
+  const pool=buildSearchPool(answers);
+  const chg=v=>{setGuess(v);setSugg(smartSuggest(v,pool,guesses,8));};
+  const sub=()=>{
+    if(!guess.trim()||done||lives<=0)return;
+    if(guesses.some(g=>g.toLowerCase()===guess.toLowerCase())){setGuess("");return;}
+    const idx=answers.findIndex(a=>a.name.toLowerCase()===guess.toLowerCase());
+    const ng=[...guesses,guess];setGuesses(ng);
+    if(idx!==-1&&!rev[idx]){
+      const nr=[...rev];nr[idx]=true;setRev(nr);
+      const ns=score+1;setScore(ns);const nc=combo+1;setCombo(nc);
+      if(ns===10){setDone(true);onFinish({score:ns,time:elapsed,perfect:true});}
+    }else{const nl=lives-1;setLives(nl);setCombo(0);if(nl<=0){setDone(true);onFinish({score,time:elapsed,perfect:false});}}
+    setGuess("");setSugg([]);
+  };
+  const hint=()=>{
+    if(hints<=0||done)return;
+    const u=answers.filter((_,i)=>!rev[i]);
+    if(u.length){const p=u[Math.floor(Math.random()*u.length)];setHintMsg(`💡 "${p.name[0]}..." — ${p.name.length} letters`);setHints(h=>h-1);setTimeout(()=>setHintMsg(null),5000);}
+  };
+  return(
+    <div style={{padding:"20px 18px 30px"}}>
+      <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+        {[{l:"SCORE",v:`${score}/10`,bg:C.pink,dk:C.pinkDk},{l:"TIME",v:fmt(elapsed),bg:C.cyan,dk:C.cyanDk},{l:"LIVES",v:"❤️".repeat(lives)||"💀",bg:C.red,dk:C.redDk},...(combo>=2?[{l:"COMBO",v:`🔥${combo}×`,bg:C.orange,dk:C.orgDk}]:[])].map(s=>(
+          <div key={s.l} style={{background:s.bg,border:`2px solid ${s.dk}`,borderRadius:12,padding:"6px 12px",boxShadow:`0 3px 0 ${s.dk}`}}>
+            <div style={{fontSize:8,color:"#fff9",fontFamily:"Arial",fontWeight:800,letterSpacing:1}}>{s.l}</div>
+            <div style={{fontSize:15,fontWeight:900,color:"#fff",fontFamily:FONT}}>{s.v}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{fontSize:16,fontWeight:900,color:C.txt,fontFamily:FONT,marginBottom:14}}>{question}</div>
+      {hintMsg&&<div style={{background:"#fffbeb",border:`2px solid ${C.yellow}`,borderRadius:12,padding:"10px 14px",marginBottom:12,fontSize:13,fontFamily:"Arial",fontWeight:700,color:C.txt}}>{hintMsg}</div>}
+      <div style={{display:"flex",flexDirection:"column",gap:7,marginBottom:16}}>
+        {answers.map((a,i)=>(
+          <div key={i} style={{background:rev[i]?"#f0fff4":C.offWhite,border:`2px solid ${rev[i]?C.green:C.border}`,
+            borderRadius:13,padding:"11px 14px",boxShadow:`0 3px 0 ${rev[i]?C.greenDk:C.border}`,
+            display:"flex",alignItems:"center",justifyContent:"space-between",transition:"all 0.3s"}}>
+            <div style={{width:26,height:26,background:rev[i]?C.green:C.border,borderRadius:9,
+              display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:900,color:"#fff",fontFamily:FONT}}>{a.rank}</div>
+            <div style={{fontSize:14,fontWeight:900,color:rev[i]?C.green:C.txtFaint,fontFamily:FONT}}>{rev[i]?a.name:"???"}</div>
+            {rev[i]&&<span style={{fontSize:16}}>✅</span>}
+          </div>
+        ))}
+      </div>
+      {!done?(
+        <>
+          <AutocompleteInput value={guess} onChange={chg} onSubmit={sub} suggestions={sugg} onSelectSuggestion={s=>{setGuess(s);setSugg([]);}} placeholder="Type a player name..." accent={C.pink}/>
+          <div style={{display:"flex",gap:8,marginTop:10}}>
+            <SmallBtn bg={C.yellow} dk={C.yelDk} color={C.txt} onClick={hint} style={{flex:1,opacity:hints<=0?0.4:1}}>💡 HINT ({hints})</SmallBtn>
+            <SmallBtn bg="#64748b" dk="#475569" onClick={()=>{setDone(true);onFinish({score,time:elapsed,perfect:false});}}>⏭ GIVE UP</SmallBtn>
+          </div>
+          <GuessChips guesses={guesses} answers={answers}/>
+        </>
+      ):(
+        <div style={{background:score===10?C.green:C.blue,border:`2px solid ${score===10?C.greenDk:C.blueDk}`,borderRadius:20,padding:"22px 18px",boxShadow:`0 5px 0 ${score===10?C.greenDk:C.blueDk}`,textAlign:"center"}}>
+          <div style={{fontSize:36,marginBottom:6}}>{score===10?"🎉":"✅"}</div>
+          <div style={{fontSize:20,fontWeight:900,color:"#fff",fontFamily:FONT}}>{score===10?"PERFECT GAME!":"GAME COMPLETE!"}</div>
+          <div style={{fontSize:13,color:"#ffffffcc",fontFamily:"Arial",marginTop:4}}>Score: {score}/10 · Time: {fmt(elapsed)}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PointlessGame({quiz,onFinish}){
+  const {question,answers}=quiz;
+  const [guess,setGuess]=useState("");const [sugg,setSugg]=useState([]);
+  const [found,setFound]=useState([]);const [lives,setLives]=useState(3);
+  const [total,setTotal]=useState(0);const [flash,setFlash]=useState(null);const [done,setDone]=useState(false);
+  const MAX=10;
+  // Pointless only suggests names from the actual answer pool (game mechanic — you must know the squad)
+  // but still merges with PLAYER_DB so partial name spelling still works
+  const pool=buildSearchPool(answers);
+  const chg=v=>{setGuess(v);setSugg(smartSuggest(v,answers.map(a=>a.name),found,6));};
+  const sub=()=>{
+    if(!guess.trim()||done||lives<=0)return;
+    const m=answers.find(a=>a.name.toLowerCase()===guess.toLowerCase());
+    if(m&&!found.includes(m.name.toLowerCase())){
+      const pts=100-m.popularity;const nf=[...found,m.name.toLowerCase()];setFound(nf);setTotal(t=>t+pts);
+      setFlash({type:"hit",name:m.name,pop:m.popularity,pts});if(nf.length>=MAX){setDone(true);onFinish({score:total+pts});}
+    }else if(found.includes(guess.toLowerCase())){setFlash({type:"dup"});}
+    else{const nl=lives-1;setLives(nl);setFlash({type:"miss"});if(nl<=0){setDone(true);onFinish({score:total});}}
+    setTimeout(()=>setFlash(null),2500);setGuess("");setSugg([]);
+  };
+  return(
+    <div style={{padding:"20px 18px 30px"}}>
+      <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+        {[{l:"SCORE",v:total,bg:C.orange,dk:C.orgDk},{l:"FOUND",v:`${found.length}/${MAX}`,bg:C.cyan,dk:C.cyanDk},{l:"LIVES",v:"❤️".repeat(lives)||"💀",bg:C.red,dk:C.redDk}].map(s=>(
+          <div key={s.l} style={{background:s.bg,border:`2px solid ${s.dk}`,borderRadius:12,padding:"6px 12px",boxShadow:`0 3px 0 ${s.dk}`}}>
+            <div style={{fontSize:8,color:"#fff9",fontFamily:"Arial",fontWeight:800,letterSpacing:1}}>{s.l}</div>
+            <div style={{fontSize:15,fontWeight:900,color:"#fff",fontFamily:FONT}}>{s.v}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{fontSize:15,fontWeight:900,color:C.txt,fontFamily:FONT,marginBottom:4}}>{question}</div>
+      <div style={{fontSize:11,color:C.txtLight,fontFamily:"Arial",marginBottom:14}}>Lower popularity = more points. Find the obscure ones!</div>
+      {flash&&(
+        <div style={{background:flash.type==="hit"?C.green:flash.type==="dup"?C.yellow:C.red,
+          border:`2px solid ${flash.type==="hit"?C.greenDk:flash.type==="dup"?C.yelDk:C.redDk}`,
+          borderRadius:14,padding:"12px 16px",marginBottom:12,boxShadow:`0 3px 0 ${flash.type==="hit"?C.greenDk:flash.type==="dup"?C.yelDk:C.redDk}`}}>
+          {flash.type==="hit"&&<><div style={{fontSize:14,fontWeight:900,color:"#fff",fontFamily:FONT}}>{flash.name}</div><div style={{fontSize:12,color:"#ffffffcc",fontFamily:"Arial"}}>Popularity {flash.pop}% → <b>+{flash.pts} pts!</b> {flash.pop<30&&"🌟 Obscure find!"}</div></>}
+          {flash.type==="dup"&&<div style={{fontSize:14,fontWeight:900,color:"#fff",fontFamily:FONT}}>⚠️ Already guessed!</div>}
+          {flash.type==="miss"&&<div style={{fontSize:14,fontWeight:900,color:"#fff",fontFamily:FONT}}>❌ Not in the list! Life lost.</div>}
+        </div>
+      )}
+      {!done?(
+        <>
+          <AutocompleteInput value={guess} onChange={chg} onSubmit={sub} suggestions={sugg} onSelectSuggestion={s=>{setGuess(s);setSugg([]);}} placeholder="Enter player name..." accent={C.orange}/>
+          <SmallBtn bg="#64748b" dk="#475569" onClick={()=>{setDone(true);onFinish({score:total});}} style={{width:"100%",marginTop:10}}>⏭ FINISH GAME</SmallBtn>
+          {found.length>0&&<div style={{marginTop:16,paddingTop:14,borderTop:`2px solid ${C.border}`}}><div style={{fontSize:10,color:C.txtLight,fontFamily:"Arial",fontWeight:800,letterSpacing:2,marginBottom:8}}>FOUND SO FAR</div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>{found.map(fn=>{const d=answers.find(a=>a.name.toLowerCase()===fn);return(<div key={fn} style={{background:C.offWhite,border:`2px solid ${C.border}`,borderRadius:10,padding:"8px 10px",boxShadow:`0 2px 0 ${C.border}`}}><div style={{fontSize:11,fontWeight:900,color:C.txt,fontFamily:FONT}}>{d?.name}</div><div style={{fontSize:10,color:C.orange,fontFamily:"Arial",fontWeight:700}}>+{100-(d?.popularity||0)} pts</div></div>);})}</div></div>}
+        </>
+      ):(
+        <div style={{background:C.orange,border:`2px solid ${C.orgDk}`,borderRadius:20,padding:"22px 18px",boxShadow:`0 5px 0 ${C.orgDk}`,textAlign:"center"}}>
+          <div style={{fontSize:36,marginBottom:6}}>🎉</div>
+          <div style={{fontSize:20,fontWeight:900,color:"#fff",fontFamily:FONT}}>GAME COMPLETE!</div>
+          <div style={{fontSize:13,color:"#ffffffcc",fontFamily:"Arial",marginTop:4}}>Final Score: {total} · Found: {found.length}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CareerPathGame({quiz,onFinish}){
+  const {clubs,player,hints}=quiz;
+  const [guess,setGuess]=useState("");const [sugg,setSugg]=useState([]);
+  const [hr,setHr]=useState(1);const [attempts,setAttempts]=useState(0);const [result,setResult]=useState(null);
+  // Always include the actual answer in the pool so it's findable
+  const pool=buildSearchPool([{name:player}]);
+  const chg=v=>{setGuess(v);setSugg(smartSuggest(v,pool,[],8));};
+  const sub=()=>{
+    if(!guess.trim()||result)return;
+    const na=attempts+1;setAttempts(na);
+    if(guess.toLowerCase()===player.toLowerCase()){const pts=na===1?3:na===2?2:1;setResult({correct:true,pts});onFinish({correct:true,attempts:na});}
+    else{if(na>=3){setResult({correct:false});onFinish({correct:false,attempts:na});}else setHr(h=>Math.min(h+1,hints.length));}
+    setGuess("");setSugg([]);
+  };
+  const cols=[C.blue,C.red,C.orange,C.lav,C.cyan,C.green,C.pink];
+  const dks=[C.blueDk,C.redDk,C.orgDk,C.lavDk,C.cyanDk,C.greenDk,C.pinkDk];
+  return(
+    <div style={{padding:"20px 18px 30px"}}>
+      <div style={{fontSize:12,color:C.txtLight,fontFamily:"Arial",fontWeight:800,letterSpacing:2,marginBottom:14}}>⚽ CAREER PATH — WHO IS THIS PLAYER?</div>
+      <div style={{background:"#fff",border:`2px solid ${C.border}`,borderRadius:18,padding:"18px",boxShadow:`0 5px 0 ${C.border}`,marginBottom:18}}>
+        <div style={{fontSize:10,color:C.txtLight,fontFamily:"Arial",fontWeight:800,letterSpacing:2,marginBottom:12}}>CLUBS PLAYED FOR (IN ORDER)</div>
+        <div style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:7}}>
+          {clubs.map((c,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:7}}>
+              <div style={{background:cols[i%cols.length],border:`2px solid ${dks[i%dks.length]}`,borderRadius:12,padding:"7px 14px",boxShadow:`0 3px 0 ${dks[i%dks.length]}`,fontSize:12,fontWeight:900,color:"#fff",fontFamily:FONT}}>{c}</div>
+              {i<clubs.length-1&&<div style={{fontSize:16,color:C.txtFaint}}>→</div>}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{marginBottom:16}}>
+        <div style={{fontSize:10,color:C.txtLight,fontFamily:"Arial",fontWeight:800,letterSpacing:2,marginBottom:10}}>CLUES ({hr}/{hints.length} revealed)</div>
+        {hints.slice(0,hr).map((h,i)=>(
+          <div key={i} style={{display:"flex",gap:10,marginBottom:10,alignItems:"flex-start"}}>
+            <div style={{width:26,height:26,background:C.yellow,border:`2px solid ${C.yelDk}`,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:900,color:C.txt,flexShrink:0,boxShadow:`0 3px 0 ${C.yelDk}`}}>{i+1}</div>
+            <div style={{fontSize:13,color:C.txt,fontFamily:"Arial",fontWeight:700,paddingTop:4}}>{h}</div>
+          </div>
+        ))}
+        {hr<hints.length&&!result&&<div style={{fontSize:11,color:C.txtFaint,fontFamily:"Arial",fontStyle:"italic"}}>Guess wrong to unlock more clues...</div>}
+      </div>
+      <div style={{fontSize:11,color:C.orange,fontFamily:"Arial",fontWeight:800,marginBottom:10}}>ATTEMPTS: {attempts}/3</div>
+      {!result?(
+        <AutocompleteInput value={guess} onChange={chg} onSubmit={sub} suggestions={sugg} onSelectSuggestion={s=>{setGuess(s);setSugg([]);}} placeholder="Who is this player?" accent={C.lav}/>
+      ):(
+        <div style={{background:result.correct?C.green:C.red,border:`2px solid ${result.correct?C.greenDk:C.redDk}`,borderRadius:18,padding:"20px 18px",boxShadow:`0 5px 0 ${result.correct?C.greenDk:C.redDk}`,textAlign:"center"}}>
+          <div style={{fontSize:32,marginBottom:6}}>{result.correct?"🎉":"😬"}</div>
+          <div style={{fontSize:18,fontWeight:900,color:"#fff",fontFamily:FONT}}>{result.correct?"Correct!":"Unlucky!"}</div>
+          <div style={{fontSize:13,color:"#ffffffcc",fontFamily:"Arial",marginTop:4}}>{result.correct?`The answer was ${player}!${result.pts===3?" First try — perfect!":""}`:`The answer was ${player}.`}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MysteryGame({quiz,onFinish}){
+  const {clues,player,options}=quiz;
+  const [sel,setSel]=useState(null);const [shown,setShown]=useState(1);const [showResult,setShowResult]=useState(false);
+  const ok=sel===player;
+  const pick=opt=>{if(sel)return;setSel(opt);setTimeout(()=>setShowResult(true),600);};
+  const sty=opt=>{
+    if(!sel)return{bg:"#fff",dk:C.border,col:C.txt};
+    if(opt===player)return{bg:C.green,dk:C.greenDk,col:"#fff"};
+    if(opt===sel)return{bg:C.red,dk:C.redDk,col:"#fff"};
+    return{bg:"#f1f5f9",dk:C.border,col:C.txtFaint};
+  };
+  return(
+    <div style={{padding:"20px 18px 30px"}}>
+      <div style={{fontSize:12,color:C.txtLight,fontFamily:"Arial",fontWeight:800,letterSpacing:2,marginBottom:14}}>🕵️ WHO AM I? — READ THE CLUES</div>
+      <div style={{background:"#fff",border:`2px solid ${C.border}`,borderRadius:18,padding:"18px",boxShadow:`0 5px 0 ${C.border}`,marginBottom:18}}>
+        {clues.slice(0,shown).map((c,i)=>(
+          <div key={i} style={{display:"flex",gap:10,marginBottom:i<shown-1?12:0,alignItems:"flex-start"}}>
+            <div style={{width:26,height:26,background:C.blue,border:`2px solid ${C.blueDk}`,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:900,color:"#fff",flexShrink:0,boxShadow:`0 3px 0 ${C.blueDk}`}}>{i+1}</div>
+            <div style={{fontSize:13,color:C.txt,fontFamily:"Arial",fontWeight:700,paddingTop:4}}>{c}</div>
+          </div>
+        ))}
+        {!sel&&shown<clues.length&&<SmallBtn bg={C.blue} dk={C.blueDk} onClick={()=>setShown(s=>s+1)} style={{width:"100%",marginTop:12}}>NEXT CLUE ({clues.length-shown} left)</SmallBtn>}
+      </div>
+      <div style={{fontSize:13,fontWeight:900,color:C.txt,fontFamily:FONT,marginBottom:10}}>🤔 Who is it?</div>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {options.map(opt=>{const{bg,dk,col}=sty(opt);return(
+          <div key={opt} onClick={()=>pick(opt)}
+            style={{background:bg,border:`2px solid ${dk}`,borderRadius:14,boxShadow:`0 ${sel?"2":"4"}px 0 ${dk}`,transform:sel?"translateY(2px)":"translateY(0)",padding:"14px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",cursor:sel?"default":"pointer",transition:"all 0.3s",userSelect:"none"}}>
+            <span style={{fontSize:14,fontWeight:900,color:col,fontFamily:FONT}}>{opt}</span>
+            {sel&&opt===player&&<span style={{fontSize:18}}>✅</span>}
+            {sel&&opt===sel&&opt!==player&&<span style={{fontSize:18}}>❌</span>}
+          </div>
+        );})}
+      </div>
+      {showResult&&<ResultBanner correct={ok} message={ok?"Spot on!":"Not quite!"} fact={ok?`${player} — well spotted!`:`The answer was ${player}.`} onNext={()=>onFinish({correct:ok,cluesUsed:shown})}/>}
+    </div>
+  );
+}
+
+function TrueOrFalseGame({quiz,onFinish}){
+  const qs=quiz;
+  const [idx,setIdx]=useState(0);const [score,setScore]=useState(0);
+  const [sel,setSel]=useState(null);const [showFact,setShowFact]=useState(false);const [done,setDone]=useState(false);
+  const q=qs[idx];const ok=sel===q.a;
+  const pick=a=>{if(sel!==null)return;setSel(a);setTimeout(()=>setShowFact(true),500);};
+  const next=()=>{if(ok)setScore(s=>s+1);const ni=idx+1;if(ni>=qs.length){setDone(true);onFinish({score:score+(ok?1:0),total:qs.length});}else{setIdx(ni);setSel(null);setShowFact(false);}};
+  if(done)return(
+    <div style={{padding:"40px 18px",textAlign:"center"}}>
+      <div style={{fontSize:50,marginBottom:12}}>🏆</div>
+      <div style={{fontSize:22,fontWeight:900,color:C.txt,fontFamily:FONT,marginBottom:8}}>All done!</div>
+      <div style={{fontSize:15,color:C.txtLight,fontFamily:"Arial"}}>{score} / {qs.length} correct</div>
+      <div style={{marginTop:18,background:score>=6?C.green:C.orange,border:`2px solid ${score>=6?C.greenDk:C.orgDk}`,borderRadius:16,padding:"12px",boxShadow:`0 4px 0 ${score>=6?C.greenDk:C.orgDk}`,fontSize:17,fontWeight:900,color:"#fff",fontFamily:FONT}}>
+        {score>=7?"🌟 Football Genius!":score>=5?"✅ Solid Knowledge":"📚 Keep Learning!"}
+      </div>
+    </div>
+  );
+  const bs=a=>{if(sel===null)return{bg:"#fff",dk:C.border,col:C.txt};if(a===q.a)return{bg:C.green,dk:C.greenDk,col:"#fff"};if(a===sel)return{bg:C.red,dk:C.redDk,col:"#fff"};return{bg:"#f1f5f9",dk:C.border,col:C.txtFaint};};
+  return(
+    <div style={{padding:"20px 18px 30px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+        <div style={{fontSize:12,color:C.txtLight,fontFamily:"Arial",fontWeight:800,letterSpacing:2}}>⚡ TRUE OR FALSE</div>
+        <div style={{background:C.blue,border:`2px solid ${C.blueDk}`,borderRadius:12,padding:"5px 12px",boxShadow:`0 3px 0 ${C.blueDk}`,fontSize:12,fontWeight:900,color:"#fff",fontFamily:FONT}}>{idx+1}/{qs.length}</div>
+      </div>
+      <ProgressBar value={idx+1} max={qs.length} bg={C.lav} h={10}/>
+      <div style={{background:"#fff",border:`2px solid ${C.border}`,borderRadius:18,padding:"24px 20px",boxShadow:`0 5px 0 ${C.border}`,margin:"16px 0",display:"flex",alignItems:"center",justifyContent:"center",minHeight:100}}>
+        <div style={{fontSize:16,fontWeight:900,color:C.txt,fontFamily:FONT,textAlign:"center",lineHeight:1.5}}>{q.q}</div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+        {[true,false].map(a=>{const{bg,dk,col}=bs(a);return(
+          <div key={String(a)} onClick={()=>pick(a)}
+            style={{background:bg,border:`2px solid ${dk}`,borderRadius:16,padding:"18px 10px",textAlign:"center",cursor:sel!==null?"default":"pointer",boxShadow:sel!==null?`0 2px 0 ${dk}`:`0 5px 0 ${dk}`,transform:sel!==null?"translateY(3px)":"translateY(0)",transition:"all 0.15s",userSelect:"none"}}>
+            <div style={{fontSize:26,marginBottom:4}}>{a?"✅":"❌"}</div>
+            <div style={{fontSize:17,fontWeight:900,color:col,fontFamily:FONT}}>{a?"TRUE":"FALSE"}</div>
+          </div>
+        );})}
+      </div>
+      {showFact&&<ResultBanner correct={ok} message={ok?"Correct!":"Wrong!"} fact={q.fact} onNext={next}/>}
+      <div style={{display:"flex",justifyContent:"center",gap:5,marginTop:14}}>
+        {qs.map((_,i)=><div key={i} style={{width:7,height:7,borderRadius:"50%",background:i<idx?C.green:i===idx?C.blue:C.border,transition:"all 0.3s"}}/>)}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GAME SHELL
+// ─────────────────────────────────────────────────────────────────────────────
+// HOW-TO-PLAY CONTENT
+// Per-game-type explainer copy used by HowToPlayModal. Triggered from the
+// "?" button on the GameShell header, and auto-shown the first time a player
+// opens each game type per session (tracked by `seenHowTos` below).
+// All facts in this block reflect the actual mechanics of the game functions
+// in this file (3 lives + 2 hints for Top 10, 8-question True/False, etc.).
+// ─────────────────────────────────────────────────────────────────────────────
+const HOWTO_CONTENT={
+  tenable:{
+    title:"Top 10",emoji:"🏆",color:C.pink,dk:C.pinkDk,
+    objective:"Name as many of the top 10 in a football category as you can. Order doesn't matter — only whether your guess is on the list.",
+    steps:[
+      "Read the category at the top — e.g. \"Premier League all-time top scorers\".",
+      "Type a name and pick from the autocomplete suggestions.",
+      "Correct guesses fill an empty slot. Wrong guesses cost a life.",
+      "You start with 3 ❤️ lives and 2 💡 hints — use them wisely.",
+    ],
+    scoring:"Score is out of 10. Hitting all 10 unlocks a PERFECT GAME bonus and keeps your combo streak going.",
+    tip:"When you're stumped, spend a hint — you'll get a starting letter and the answer length to nudge you in.",
+  },
+  pointless:{
+    title:"Pointless",emoji:"📉",color:C.orange,dk:C.orgDk,
+    objective:"Find the obscure names hidden in a real squad or player list. The less famous a name is, the more points you score.",
+    steps:[
+      "Read the squad theme — e.g. \"Leicester's 2015-16 PL winners\".",
+      "Type a name. If it's in the squad you score 100 minus their popularity.",
+      "Stars are worth few points; deep cuts are worth a lot.",
+      "Wrong guesses cost a life. You have 3 ❤️ and can find up to 10 names.",
+    ],
+    scoring:"Each correct answer = 100 − their popularity rating. A 20% squad-filler scores 80 points; a 95% star scores just 5.",
+    tip:"Skip the obvious legends — go straight for the bench-warmers and youth-team graduates you half-remember.",
+  },
+  careerPath:{
+    title:"Career Path",emoji:"📋",color:C.lav,dk:C.lavDk,
+    objective:"Identify a player from the chronological list of clubs they played for.",
+    steps:[
+      "Study the clubs in the order the player joined them.",
+      "You start with 1 clue revealed. Type your guess into the search box.",
+      "A wrong guess unlocks the next clue — you have 3 attempts in total.",
+      "Pick a name from the autocomplete to lock in your final guess.",
+    ],
+    scoring:"First-try guess = 3 points · second try = 2 · third try = 1. Miss all three and you score 0 — but you'll still see the answer.",
+    tip:"Look for the unusual jumps — a Brazilian club into a small Eastern European league usually narrows it down fast.",
+  },
+  mystery:{
+    title:"Who Am I?",emoji:"🕵️",color:C.blue,dk:C.blueDk,
+    objective:"Identify the mystery footballer from a chain of progressively revealing clues, then pick the right name from 4 options.",
+    steps:[
+      "Read the first clue — it's deliberately vague.",
+      "Tap NEXT CLUE to reveal more, but only the brave guess early.",
+      "When you're confident, pick from the four multiple-choice options.",
+      "You only get one guess — fewer clues used means a stronger result.",
+    ],
+    scoring:"You're scored correct or incorrect, but the app tracks how many clues you used so going early genuinely counts.",
+    tip:"Birth-year and home-town clues are usually the biggest tell — don't skim past them.",
+  },
+  trueOrFalse:{
+    title:"True or False",emoji:"⚡",color:C.cyan,dk:C.cyanDk,
+    objective:"Fast-fire football facts. Tap TRUE or FALSE for each statement and learn the story behind it.",
+    steps:[
+      "Read the statement at the top of the card.",
+      "Tap TRUE or FALSE — there's no time pressure but no second guesses.",
+      "After each answer you'll see the verdict and a quick fact.",
+      "Each round runs 8 questions — your score is your correct total.",
+    ],
+    scoring:"1 point per correct answer, out of 8. There's no penalty for a wrong guess — just keep going.",
+    tip:"Watch out for false-trap questions that look right at a glance — re-read the year or scoreline before you tap.",
+  },
+};
+
+// Module-level set: tracks which game types have already auto-shown the
+// HowToPlay modal this session. Resets on full reload — will be replaced
+// with persistent storage (AsyncStorage) in the React Native port so first-
+// time players only ever see each tutorial once across sessions.
+const seenHowTos=new Set();
+
+function HowToPlayModal({gameId,onClose}){
+  const c=HOWTO_CONTENT[gameId]||HOWTO_CONTENT.tenable;
+  return(
+    <div onClick={onClose}
+      style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.55)",zIndex:200,
+        display:"flex",alignItems:"center",justifyContent:"center",padding:"24px 16px",
+        fontFamily:FONT,backdropFilter:"blur(2px)"}}>
+      <div onClick={e=>e.stopPropagation()}
+        style={{background:"#fff",border:`2px solid ${c.dk}`,borderRadius:24,
+          width:"100%",maxWidth:380,maxHeight:"85vh",overflow:"hidden",
+          boxShadow:`0 8px 0 ${c.dk}, 0 20px 60px rgba(0,0,0,0.3)`,display:"flex",flexDirection:"column"}}>
+        {/* Coloured header */}
+        <div style={{background:c.color,padding:"22px 22px 18px",position:"relative"}}>
+          <div onClick={onClose}
+            style={{position:"absolute",top:12,right:12,width:32,height:32,
+              background:"#ffffff33",border:"2px solid #ffffff55",borderRadius:10,
+              display:"flex",alignItems:"center",justifyContent:"center",
+              fontSize:14,fontWeight:900,color:"#fff",cursor:"pointer",userSelect:"none"}}>✕</div>
+          <div style={{fontSize:9,color:"#ffffffcc",fontFamily:"Arial",fontWeight:800,letterSpacing:2,marginBottom:6}}>HOW TO PLAY</div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:30}}>{c.emoji}</span>
+            <span style={{fontSize:22,fontWeight:900,color:"#fff",fontFamily:FONT}}>{c.title}</span>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div style={{padding:"18px 20px 20px",overflowY:"auto"}}>
+          <div style={{fontSize:13,color:C.txt,fontFamily:"Arial",fontWeight:700,lineHeight:1.5,marginBottom:18}}>
+            {c.objective}
+          </div>
+
+          <div style={{fontSize:10,color:c.color,fontFamily:"Arial",fontWeight:800,letterSpacing:2,marginBottom:10}}>HOW IT WORKS</div>
+          <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:18}}>
+            {c.steps.map((s,i)=>(
+              <div key={i} style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+                <div style={{width:24,height:24,background:c.color,border:`2px solid ${c.dk}`,borderRadius:8,
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                  fontSize:11,fontWeight:900,color:"#fff",flexShrink:0,boxShadow:`0 2px 0 ${c.dk}`,fontFamily:FONT}}>{i+1}</div>
+                <div style={{fontSize:12,color:C.txt,fontFamily:"Arial",fontWeight:700,paddingTop:3,lineHeight:1.45}}>{s}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{background:C.offWhite,border:`2px solid ${C.border}`,borderRadius:14,padding:"12px 14px",marginBottom:10,boxShadow:`0 3px 0 ${C.border}`}}>
+            <div style={{fontSize:9,color:C.txtLight,fontFamily:"Arial",fontWeight:800,letterSpacing:2,marginBottom:4}}>SCORING</div>
+            <div style={{fontSize:12,color:C.txt,fontFamily:"Arial",fontWeight:700,lineHeight:1.45}}>{c.scoring}</div>
+          </div>
+
+          <div style={{background:"#fffbeb",border:`2px solid ${C.yellow}`,borderRadius:14,padding:"12px 14px",marginBottom:18,boxShadow:`0 3px 0 ${C.yellow}`}}>
+            <div style={{fontSize:9,color:C.yelDk,fontFamily:"Arial",fontWeight:800,letterSpacing:2,marginBottom:4}}>💡 TIP</div>
+            <div style={{fontSize:12,color:C.txt,fontFamily:"Arial",fontWeight:700,lineHeight:1.45}}>{c.tip}</div>
+          </div>
+
+          <RaisedBtn bg={c.color} dk={c.dk} onClick={onClose} style={{borderRadius:16}}>GOT IT — LET'S PLAY</RaisedBtn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+const GAME_META={
+  tenable:    {title:"Top 10",    color:C.pink,  dk:C.pinkDk,icon:"🏆"},
+  pointless:  {title:"Pointless", color:C.orange,dk:C.orgDk, icon:"📉"},
+  careerPath: {title:"Career Path",color:C.lav,  dk:C.lavDk, icon:"📋"},
+  mystery:    {title:"Who Am I?", color:C.blue,  dk:C.blueDk,icon:"🕵️"},
+  trueOrFalse:{title:"True/False",color:C.cyan,  dk:C.cyanDk,icon:"⚡"},
+};
+const GAME_CARDS=[
+  {id:"tenable",   title:"Top 10",     emoji:"🏆",desc:"Name the top 10",   bg:C.pink,  dk:C.pinkDk, tag:"HOT"},
+  {id:"pointless", title:"Pointless",  emoji:"📉",desc:"Find rare answers", bg:C.orange,dk:C.orgDk,  tag:"HOT"},
+  {id:"careerPath",title:"Career Path",emoji:"📋",desc:"Guess from clubs",  bg:C.lav,   dk:C.lavDk,  tag:"NEW"},
+  {id:"mystery",   title:"Who Am I?",  emoji:"🕵️",desc:"Guess from clues",  bg:C.blue,  dk:C.blueDk, tag:null},
+  {id:"trueOrFalse",title:"True/False",emoji:"⚡",desc:"Fast-fire facts",   bg:C.cyan,  dk:C.cyanDk, tag:"NEW"},
+  {id:"daily",     title:"Daily",      emoji:"🌟",desc:"One shot daily",    bg:"#1a2060",dk:"#0f1540",tag:"DAILY"},
+];
+
+function GameShell({gameId,onBack,todayQuiz}){
+  const meta=GAME_META[gameId]||GAME_META.tenable;
+  // "daily" reuses the Top 10 mechanics, so its tutorial is the tenable one.
+  const howToId=gameId==="daily"?"tenable":gameId;
+  const [showHowTo,setShowHowTo]=useState(false);
+  // Auto-show the tutorial the first time a player opens each game type
+  // this session. Module-level `seenHowTos` survives screen re-mounts so
+  // bouncing between Home → Game → Home → Game won't repeatedly re-trigger.
+  useEffect(()=>{
+    if(HOWTO_CONTENT[howToId]&&!seenHowTos.has(howToId)){
+      seenHowTos.add(howToId);
+      setShowHowTo(true);
+    }
+  },[howToId]);
+  return(
+    <div style={{background:C.offWhite,minHeight:"100vh",fontFamily:FONT}}>
+      <div style={{background:"#fff",padding:"14px 18px",borderBottom:`2px solid ${C.border}`,display:"flex",alignItems:"center",gap:10}}>
+        <SmallBtn bg="#f1f5f9" dk={C.border} color={C.txtLight} onClick={onBack} style={{borderRadius:14,padding:"8px 14px",fontSize:18,minWidth:44}}>✕</SmallBtn>
+        <div style={{flex:1,background:meta.color,border:`2px solid ${meta.dk}`,borderRadius:12,padding:"8px 16px",boxShadow:`0 3px 0 ${meta.dk}`,display:"flex",alignItems:"center",gap:8,minWidth:0}}>
+          <span style={{fontSize:18}}>{meta.icon}</span>
+          <span style={{fontSize:14,fontWeight:900,color:"#fff",fontFamily:FONT,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{meta.title}</span>
+        </div>
+        {HOWTO_CONTENT[howToId]&&(
+          <SmallBtn bg="#f1f5f9" dk={C.border} color={C.blue} onClick={()=>setShowHowTo(true)}
+            style={{borderRadius:14,padding:"8px 12px",fontSize:16,minWidth:40}}>?</SmallBtn>
+        )}
+        <HeartBar current={5}/>
+      </div>
+      {gameId==="tenable"    &&<TopTenGame     quiz={todayQuiz.tenable}    onFinish={onBack}/>}
+      {gameId==="pointless"  &&<PointlessGame  quiz={todayQuiz.pointless}  onFinish={onBack}/>}
+      {gameId==="careerPath" &&<CareerPathGame quiz={todayQuiz.careerPath} onFinish={onBack}/>}
+      {gameId==="mystery"    &&<MysteryGame    quiz={todayQuiz.mystery}    onFinish={onBack}/>}
+      {gameId==="trueOrFalse"&&<TrueOrFalseGame quiz={todayQuiz.trueOrFalse} onFinish={onBack}/>}
+      {gameId==="daily"      &&<TopTenGame     quiz={todayQuiz.tenable}    onFinish={onBack}/>}
+      {showHowTo&&HOWTO_CONTENT[howToId]&&<HowToPlayModal gameId={howToId} onClose={()=>setShowHowTo(false)}/>}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCREEN: HOME
+// ─────────────────────────────────────────────────────────────────────────────
+function GameCard({g,onSelect}){
+  const [p,setP]=useState(false);
+  return(
+    <div onClick={()=>onSelect(g.id)} onMouseDown={()=>setP(true)} onMouseUp={()=>setP(false)} onMouseLeave={()=>setP(false)} onTouchStart={()=>setP(true)} onTouchEnd={()=>setP(false)}
+      style={{background:g.bg,border:`2px solid ${g.dk}`,borderRadius:20,padding:"17px 13px",cursor:"pointer",position:"relative",overflow:"hidden",boxShadow:p?`0 2px 0 ${g.dk}`:`0 6px 0 ${g.dk}`,transform:p?"translateY(4px)":"translateY(0)",transition:"all 0.1s",userSelect:"none"}}>
+      <div style={{position:"absolute",right:-6,bottom:-6,fontSize:55,opacity:0.1}}>{g.emoji}</div>
+      {g.tag&&<div style={{position:"absolute",top:10,right:10}}><Tag label={g.tag}/></div>}
+      <div style={{width:46,height:46,background:"#fff2",border:"2px solid #fff3",borderRadius:16,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,marginBottom:9}}>{g.emoji}</div>
+      <div style={{fontSize:14,fontWeight:900,color:"#fff",marginBottom:2,fontFamily:FONT}}>{g.title}</div>
+      <div style={{fontSize:10,color:"#ffffffbb",fontFamily:"Arial",marginBottom:9}}>{g.desc}</div>
+      <div style={{width:28,height:28,background:"#fff2",border:"2px solid #fff3",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:13,fontWeight:900}}>→</div>
+    </div>
+  );
+}
+
+function HomeScreen({onSelect,onNav,user,stats,todayQuiz,dailyDone,setDailyDone}){
+  const countdown=useCountdown();
+  const daily=todayQuiz.daily;
+  return(
+    <div style={{background:C.offWhite,minHeight:"100vh",fontFamily:FONT,paddingBottom:90}}>
+      {/* Top bar */}
+      <div style={{background:"#fff",padding:"15px 18px 13px",borderBottom:`2px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <Logo/>
+        <div style={{background:C.yellow,border:`2px solid ${C.yelDk}`,borderRadius:14,padding:"6px 12px",boxShadow:`0 3px 0 ${C.yelDk}`,display:"flex",alignItems:"center",gap:5,cursor:"pointer"}}>
+          <span style={{fontSize:15}}>🔥</span>
+          <div><div style={{fontSize:14,fontWeight:900,color:"#78350f",lineHeight:1}}>{stats.streak}</div><div style={{fontSize:7,color:"#92400e",fontFamily:"Arial",letterSpacing:1}}>STREAK</div></div>
+        </div>
+      </div>
+      {/* Stats strip */}
+      <div style={{background:"#fff",display:"flex",borderBottom:`2px solid ${C.border}`}}>
+        {[["⚡",stats.xp,"XP"],["💎",48,"GEMS"],["❤️",5,"LIVES"]].map(([icon,val,label])=>(
+          <div key={label} style={{flex:1,padding:"9px 0",display:"flex",flexDirection:"column",alignItems:"center",borderRight:label!=="LIVES"?`1px solid ${C.border}`:"none"}}>
+            <div style={{fontSize:17}}>{icon}</div>
+            <div style={{fontSize:14,fontWeight:900,color:C.txt,lineHeight:1.1}}>{val}</div>
+            <div style={{fontSize:8,color:C.txtFaint,fontFamily:"Arial",letterSpacing:1.5}}>{label}</div>
+          </div>
+        ))}
+      </div>
+      {/* XP bar */}
+      <div style={{background:"#fff",padding:"10px 18px 14px",borderBottom:`2px solid ${C.border}`}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+          <span style={{fontSize:10,color:C.txtLight,fontFamily:"Arial",fontWeight:700}}>Level {stats.level}</span>
+          <span style={{fontSize:10,color:C.blue,fontFamily:"Arial",fontWeight:800}}>{stats.xp} / 2000 XP</span>
+          <span style={{fontSize:10,color:C.txtLight,fontFamily:"Arial",fontWeight:700}}>Level {stats.level+1}</span>
+        </div>
+        <ProgressBar value={stats.xp} max={2000} h={12}/>
+      </div>
+
+      <div style={{padding:"18px 16px 0"}}>
+        {/* Daily Challenge */}
+        <div style={{fontSize:11,color:C.txtLight,fontFamily:"Arial",fontWeight:800,letterSpacing:2,marginBottom:10}}>⚡ DAILY CHALLENGE</div>
+        {!dailyDone?(
+          <div style={{background:C.orange,border:`2px solid ${C.orgDk}`,borderRadius:20,padding:"18px 20px",boxShadow:`0 6px 0 ${C.orgDk}`,display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:22,position:"relative",overflow:"hidden"}}>
+            <div style={{position:"absolute",right:-8,top:"50%",transform:"translateY(-60%)",fontSize:70,opacity:0.1}}>🏆</div>
+            <div>
+              <div style={{fontSize:9,color:"#fff9",fontFamily:"Arial",letterSpacing:2,fontWeight:800,marginBottom:3}}>TODAY'S GAME</div>
+              <div style={{fontSize:17,fontWeight:900,color:"#fff",marginBottom:3}}>{daily.title}</div>
+              <div style={{fontSize:11,color:"#fff9",fontFamily:"Arial",marginBottom:4}}>{daily.subtitle}</div>
+              <div style={{fontSize:10,color:"#fff9",fontFamily:"Arial",fontWeight:700}}>5,142 players today 👥</div>
+            </div>
+            <SmallBtn bg="#fff" dk={C.border} color={C.orange} onClick={()=>{setDailyDone(true);onSelect(daily.gameId);}} style={{borderRadius:14,minWidth:74}}>PLAY →</SmallBtn>
+          </div>
+        ):(
+          <div style={{background:"#fff",border:`2px solid ${C.green}`,borderRadius:20,padding:"16px 20px",boxShadow:`0 5px 0 ${C.greenDk}`,marginBottom:22,display:"flex",alignItems:"center",gap:14}}>
+            <div style={{fontSize:36}}>✅</div>
+            <div>
+              <div style={{fontSize:15,fontWeight:900,color:C.green,fontFamily:FONT}}>Challenge Complete!</div>
+              <div style={{fontSize:11,color:C.txtLight,fontFamily:"Arial"}}>Next challenge in: <b style={{color:C.blue}}>{countdown}</b></div>
+            </div>
+          </div>
+        )}
+
+        {/* Game Grid */}
+        <div style={{fontSize:11,color:C.txtLight,fontFamily:"Arial",fontWeight:800,letterSpacing:2,marginBottom:10}}>🎮 CHOOSE YOUR GAME</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          {GAME_CARDS.map(g=><GameCard key={g.id} g={g} onSelect={onSelect}/>)}
+        </div>
+      </div>
+      <BottomNav active="home" onNav={onNav}/>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCREEN: STATS
+// ─────────────────────────────────────────────────────────────────────────────
+function StatsScreen({onNav,stats}){
+  const b=stats.bks;const bc=b>=90?C.yellow:b>=75?C.lav:b>=50?C.cyan:C.blue;
+  const bl=b>=90?"Football Genius":b>=75?"Expert":b>=50?"Solid":b>=25?"Learning":"Newcomer";
+  return(
+    <div style={{background:C.offWhite,minHeight:"100vh",fontFamily:FONT,paddingBottom:90}}>
+      <div style={{background:C.blue,padding:"20px 18px 28px",borderRadius:"0 0 34px 34px",boxShadow:`0 6px 30px ${C.blue}40`}}>
+        <div style={{fontSize:10,color:"#93c5fd",fontFamily:"Arial",fontWeight:800,letterSpacing:3,marginBottom:6}}>YOUR STATS</div>
+        <div style={{fontSize:24,fontWeight:900,color:"#fff"}}>📊 Performance</div>
+        <div style={{background:"#fff2",border:"2px solid #fff2",borderRadius:18,padding:"14px 18px",marginTop:16,display:"flex",alignItems:"center",gap:14}}>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:44,fontWeight:900,color:bc,fontFamily:FONT,textShadow:`0 0 20px ${bc}80`}}>{b}</div>
+            <div style={{fontSize:9,color:"#93c5fd",fontFamily:"Arial",fontWeight:800,letterSpacing:2}}>BKS SCORE</div>
+          </div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:15,fontWeight:900,color:"#fff",marginBottom:5}}>{bl}</div>
+            <ProgressBar value={b} max={100} bg={bc} h={9}/>
+            <div style={{fontSize:10,color:"#93c5fd",fontFamily:"Arial",marginTop:5}}>Your overall football brain score</div>
+          </div>
+        </div>
+      </div>
+      <div style={{padding:"18px 16px"}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:18}}>
+          {[{label:"Games",val:stats.gamesPlayed,icon:"🎮",bg:C.blue,dk:C.blueDk},{label:"Best",val:`${stats.bestScore}/10`,icon:"⭐",bg:C.yellow,dk:C.yelDk},{label:"Perfect",val:stats.perfectGames,icon:"💯",bg:C.green,dk:C.greenDk},{label:"Streak",val:stats.streak,icon:"🔥",bg:C.orange,dk:C.orgDk},{label:"Accuracy",val:`${stats.accuracy}%`,icon:"🎯",bg:C.lav,dk:C.lavDk},{label:"Total XP",val:stats.xp,icon:"⚡",bg:C.cyan,dk:C.cyanDk}].map(s=>(
+            <div key={s.label} style={{background:s.bg,border:`2px solid ${s.dk}`,borderRadius:16,padding:"14px 12px",boxShadow:`0 4px 0 ${s.dk}`}}>
+              <div style={{fontSize:22,marginBottom:5}}>{s.icon}</div>
+              <div style={{fontSize:20,fontWeight:900,color:"#fff",fontFamily:FONT}}>{s.val}</div>
+              <div style={{fontSize:9,color:"#ffffffaa",fontFamily:"Arial",fontWeight:700}}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{fontSize:11,color:C.txtLight,fontFamily:"Arial",fontWeight:800,letterSpacing:2,marginBottom:10}}>GAME BREAKDOWN</div>
+        {[{name:"Top 10",icon:"🏆",played:stats.tenablePlayed,best:`${stats.tenableBest}/10`},{name:"Pointless",icon:"📉",played:stats.pointlessPlayed,best:`${stats.pointlessBest} pts`},{name:"Career Path",icon:"📋",played:stats.careerPlayed,best:`${stats.careerBest}/3 tries`},{name:"True/False",icon:"⚡",played:stats.tfPlayed,best:`${stats.tfBest}/8`}].map(g=>(
+          <div key={g.name} style={{background:"#fff",border:`2px solid ${C.border}`,borderRadius:14,padding:"12px 14px",marginBottom:8,boxShadow:`0 3px 0 ${C.border}`,display:"flex",alignItems:"center",gap:12}}>
+            <div style={{fontSize:22}}>{g.icon}</div>
+            <div style={{flex:1}}><div style={{fontSize:13,fontWeight:900,color:C.txt}}>{g.name}</div><div style={{fontSize:10,color:C.txtLight,fontFamily:"Arial"}}>Played {g.played} times</div></div>
+            <div style={{background:C.offWhite,border:`2px solid ${C.border}`,borderRadius:10,padding:"5px 12px",fontSize:12,fontWeight:900,color:C.blue,fontFamily:FONT}}>Best: {g.best}</div>
+          </div>
+        ))}
+      </div>
+      <BottomNav active="stats" onNav={onNav}/>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCREEN: LEAGUE
+// ─────────────────────────────────────────────────────────────────────────────
+function LeagueScreen({onNav,stats}){
+  const me={rank:4,name:"You",xp:stats.xp,streak:stats.streak};
+  const all=[...LEADERBOARD_DATA.slice(0,3),...[...LEADERBOARD_DATA.slice(3),me].sort((a,b)=>b.xp-a.xp)];
+  const [tab,setTab]=useState("weekly");
+  return(
+    <div style={{background:C.offWhite,minHeight:"100vh",fontFamily:FONT,paddingBottom:90}}>
+      <div style={{background:C.blue,padding:"20px 18px 28px",borderRadius:"0 0 34px 34px",boxShadow:`0 6px 30px ${C.blue}40`}}>
+        <div style={{fontSize:10,color:"#93c5fd",fontFamily:"Arial",fontWeight:800,letterSpacing:3,marginBottom:6}}>GLOBAL RANKINGS</div>
+        <div style={{fontSize:24,fontWeight:900,color:"#fff"}}>🏆 Leaderboard</div>
+        <div style={{fontSize:11,color:"#93c5fd",fontFamily:"Arial",marginTop:4}}>You're ranked #4 — keep climbing!</div>
+        <div style={{display:"flex",gap:8,marginTop:14}}>
+          {["weekly","monthly","alltime"].map(t=>(
+            <div key={t} onClick={()=>setTab(t)} style={{flex:1,padding:"8px 0",textAlign:"center",borderRadius:14,cursor:"pointer",background:tab===t?"#fff":"#ffffff20",color:tab===t?C.blue:"#ffffffbb",fontWeight:900,fontSize:11,fontFamily:FONT,border:tab===t?`2px solid ${C.border}`:"2px solid transparent",transition:"all 0.2s"}}>
+              {t==="weekly"?"Weekly":t==="monthly"?"Monthly":"All Time"}
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* Podium */}
+      <div style={{display:"flex",alignItems:"flex-end",justifyContent:"center",gap:10,padding:"24px 18px 18px"}}>
+        {[LEADERBOARD_DATA[1],LEADERBOARD_DATA[0],LEADERBOARD_DATA[2]].map((p,i)=>{
+          const hs=[78,100,65];const cs=[C.cyan,C.yellow,C.lav];const ds=[C.cyanDk,C.yelDk,C.lavDk];const es=["🥈","🥇","🥉"];
+          return(
+            <div key={p.rank} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5,flex:1}}>
+              <div style={{fontSize:22}}>{es[i]}</div>
+              <div style={{fontSize:10,color:C.txt,fontFamily:"Arial",fontWeight:700,textAlign:"center",lineHeight:1.3}}>{p.name}</div>
+              <div style={{fontSize:9,color:C.txtLight,fontFamily:"Arial"}}>{p.xp.toLocaleString()} XP</div>
+              <div style={{width:"100%",height:hs[i],background:cs[i],border:`2px solid ${ds[i]}`,borderRadius:"10px 10px 0 0",boxShadow:`0 4px 0 ${ds[i]}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:900,color:i===1?"#78350f":"#fff",fontFamily:FONT}}>{[2,1,3][i]}</div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{padding:"0 16px"}}>
+        {[...LEADERBOARD_DATA.slice(3),me].map(p=>{
+          const isMe=p===me;
+          return(
+            <div key={p.rank||"me"} style={{background:isMe?"#eff6ff":"#fff",border:`2px solid ${isMe?C.blue:C.border}`,borderRadius:16,padding:"12px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:12,boxShadow:`0 3px 0 ${isMe?C.blueDk:C.border}`}}>
+              <div style={{width:30,height:30,background:isMe?C.blue:C.offWhite,border:`2px solid ${isMe?C.blueDk:C.border}`,borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:900,color:isMe?"#fff":C.txtLight,fontFamily:FONT,flexShrink:0}}>{p.rank||4}</div>
+              <div style={{flex:1}}><div style={{fontSize:13,fontWeight:900,color:isMe?C.blue:C.txt}}>{p.name}{isMe?" (You)":""}</div><div style={{fontSize:10,color:C.txtFaint,fontFamily:"Arial"}}>🔥 {p.streak} day streak</div></div>
+              <div style={{fontSize:12,fontWeight:900,color:C.txt,fontFamily:FONT}}>{p.xp.toLocaleString()} XP</div>
+            </div>
+          );
+        })}
+      </div>
+      <BottomNav active="league" onNav={onNav}/>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCREEN: PROFILE
+// ─────────────────────────────────────────────────────────────────────────────
+function ProfileScreen({onNav,stats,user,onLogout}){
+  const earned=stats.achievements||[];
+  return(
+    <div style={{background:C.offWhite,minHeight:"100vh",fontFamily:FONT,paddingBottom:90}}>
+      <div style={{background:`linear-gradient(135deg,${C.blue},${C.cyan})`,padding:"28px 18px 38px",borderRadius:"0 0 38px 38px",textAlign:"center",boxShadow:`0 8px 30px ${C.blue}40`}}>
+        <div style={{width:76,height:76,background:"#fff",borderRadius:"50%",margin:"0 auto 10px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,border:`4px solid ${C.yellow}`,boxShadow:`0 4px 0 ${C.yelDk}`}}>👤</div>
+        <div style={{fontSize:18,fontWeight:900,color:"#fff"}}>{user?.username||"Player"}</div>
+        <div style={{fontSize:11,color:"#e0f2fe",fontFamily:"Arial",marginTop:3}}>Level {stats.level} · Football Brain</div>
+        <div style={{display:"flex",justifyContent:"center",gap:8,marginTop:14,flexWrap:"wrap"}}>
+          {[["🔥",stats.streak,"Streak"],["⚡",stats.xp,"XP"],["🏅","#4","Rank"],["🎯",`${stats.accuracy}%`,"Accuracy"]].map(([icon,val,label])=>(
+            <div key={label} style={{background:"#fff2",border:"2px solid #fff3",borderRadius:14,padding:"9px 13px",textAlign:"center"}}>
+              <div style={{fontSize:16}}>{icon}</div>
+              <div style={{fontSize:15,fontWeight:900,color:"#fff"}}>{val}</div>
+              <div style={{fontSize:8,color:"#e0f2fe",fontFamily:"Arial",letterSpacing:1}}>{label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{padding:"20px 16px"}}>
+        <div style={{fontSize:11,color:C.txtLight,fontFamily:"Arial",fontWeight:800,letterSpacing:2,marginBottom:12}}>🏅 BADGES</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:20}}>
+          {ACHIEVEMENTS.map(a=>{const h=earned.includes(a.id);return(
+            <div key={a.id} style={{background:h?"#fff":"#f1f5f9",border:`2px solid ${h?C.yellow:C.border}`,borderRadius:16,padding:"14px 8px",textAlign:"center",boxShadow:`0 3px 0 ${h?C.yelDk:C.border}`,opacity:h?1:0.42}}>
+              <div style={{fontSize:26,marginBottom:5,filter:h?"none":"grayscale(1)"}}>{a.emoji}</div>
+              <div style={{fontSize:9,color:h?C.txt:C.txtFaint,fontFamily:"Arial",fontWeight:700,lineHeight:1.3}}>{a.name}</div>
+            </div>
+          );})}
+        </div>
+        <RaisedBtn bg={C.red} dk={C.redDk} onClick={onLogout} style={{borderRadius:14}}>Log Out</RaisedBtn>
+      </div>
+      <BottomNav active="profile" onNav={onNav}/>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// APP SHELL
+// ─────────────────────────────────────────────────────────────────────────────
+const DEFAULT_STATS={
+  gamesPlayed:14,bestScore:9,perfectGames:2,streak:12,xp:1240,level:7,
+  bks:42,accuracy:74,achievements:["first_game","streak_3","games_10"],
+  tenablePlayed:5,tenableBest:9,pointlessPlayed:4,pointlessBest:640,
+  careerPlayed:3,careerBest:1,tfPlayed:2,tfBest:6,comboStreak:3,dailyStreak:5,
+};
+
+export default function App(){
+  const [user,setUser]   = useState(null);
+  const [screen,setScreen] = useState("home");
+  const [gameId,setGameId] = useState(null);
+  const [stats]            = useState(DEFAULT_STATS);
+  const [achievement]      = useState(null);
+  const [dailyDone,setDailyDone] = useState(false);
+  const todayQuiz = getTodayQuiz();
+
+  const handleLogin  = u  => setUser(u);
+  const handleLogout = () => { setUser(null); setScreen("home"); };
+  const handleSelect = id => { setGameId(id); setScreen("game"); };
+  const handleNav    = id => setScreen(id);
+  const handleBack   = () => setScreen("home");
+
+  if(!user) return <LoginScreen onLogin={handleLogin}/>;
+
+  return(
+    <div style={{maxWidth:430,margin:"0 auto",position:"relative",minHeight:"100vh",background:C.offWhite,fontFamily:FONT}}>
+      {achievement&&<AchievementPopup achievement={achievement} onDone={()=>{}}/>}
+      {screen==="game"   &&<GameShell   gameId={gameId} onBack={handleBack} todayQuiz={todayQuiz}/>}
+      {screen==="home"   &&<HomeScreen  onSelect={handleSelect} onNav={handleNav} user={user} stats={stats} todayQuiz={todayQuiz} dailyDone={dailyDone} setDailyDone={setDailyDone}/>}
+      {screen==="stats"  &&<StatsScreen onNav={handleNav} stats={stats}/>}
+      {screen==="league" &&<LeagueScreen onNav={handleNav} stats={stats}/>}
+      {screen==="profile"&&<ProfileScreen onNav={handleNav} stats={stats} user={user} onLogout={handleLogout}/>}
+    </div>
+  );
+}
